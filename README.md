@@ -1,69 +1,69 @@
-# ???? Roblox City Heist: Drive & Escape
+# Roblox City Heist: Drive & Escape
 
-> **Oficjalny projekt szkolny na zaj?cia zawodowe z zakresu programowania i kontroli wersji.**
+> **Oficjalny projekt szkolny na zajecia zawodowe z zakresu programowania i kontroli wersji.**
 > 
-> *Zanurz si? w niebezpiecznym, t?tni?cym ?yciem otwartym ?wiecie, gdzie liczy si? refleks, spryt i szybkie samochody. Przejmij kontrol? nad ulicami miasta jako przest?pca planuj?cy skoki ?ycia lub sta里 po stronie prawa i powstrzymaj fal? przest?pczo?ci!*
+> *Zanurz sie w niebezpiecznym, tetniacym zyciem otwartym swiecie, gdzie liczy sie refleks, spryt i szybkie samochody. Przejmij kontrole nad ulicami miasta jako przestepca planujacy skoki zycia lub stan po stronie prawa i powstrzymaj fale przestepczosci!*
 
 ---
 
-## ?? O Gra i Koncepcja (Project Teaser)
+## O Gra i Koncepcja (Project Teaser)
 
-**Roblox City Heist** to wieloosobowa gra akcji w otwartym ?wiecie stworzona w ?rodowisku **Roblox Studio**, inspirowana legendarnymi mechanikami serii *Grand Theft Auto (GTA)*.
+**Roblox City Heist** to wieloosobowa gra akcji w otwartym swiecie stworzona w srodowisku **Roblox Studio**, inspirowana mechanikami serii *Grand Theft Auto (GTA)*.
 
-Gracze trafiaj? do t?tni?cej ?yciem metropolii, w kt車rej ka?da decyzja ma swoje konsekwencje. Zorganizuj napad na lokalny bank, obrabuj kas? pancern? w sklepie, a nast?pnie wskakuj w podrasowane auto i uciekaj przed ob?aw? policji! 
+Gracze trafiaja do tetniacej zyciem metropolii, w ktorej kazda decyzja ma swoje konsekwencje. Zorganizuj napad na lokalny bank, obrabuj kase pancerna w sklepie, a nastepnie wskakuj w podrasowane auto i uciekaj przed oblawa policji! 
 
-### ?? Kluczowe Funkcje Gry:
-* ?? **System Napad車w i Skok車w:** Interaktywne lokacje (sklepy, bankomaty, sejfy) z dynamicznym odliczaniem czasu ucieczki i czasem odnowienia (cooldown).
-* ?? **Dynamiczny Poziom Poszukiwa里 (Heat System):** Im wi?kszy skok, tym wi?cej gwiazdek po?cigu! Zwi?kszaj?cy si? poziom trudno?ci i agresja policji.
-* ??? **Fizyka i Tuning Pojazd車w:** Model prowadzenia aut dostosowany do dynamicznych ucieczek, po?lizg車w i wymijania blokad drogowych.
-* ?? **Ekonomia i Post?p Gracza:** Zapisywanie got車wki, kupowanie broni, ekwipunku oraz unikalnych pojazd車w (`DataStoreService`).
-* ?? **Szybka Iteracja z AI:** Wykorzystanie narz?dzi sztucznej inteligencji (Roblox Assistant / AI Scripting) do szybkiego tworzenia i optymalizacji kodu w Luau.
-
----
-
-## ??? Stan Projektu i Wykonane Prace (Progress Log)
-
-### ?? Co zosta?o zrobione do tej pory?
-- [x] **Konfiguracja SSH:** Wygenerowanie i dodanie klucza SSH (`ed25519`) na koncie GitHub dla bezpiecznego po??czenia.
-- [x] **Inicjalizacja Repozytorium:** Utworzenie struktury projektu, pliku `README.md` oraz `.gitignore` wykluczaj?cego zb?dne pliki tymczasowe Robloxa (`*.lock`).
-- [x] **Po??czenie z Serwerem:** Poprawne skonfigurowanie zdalnego repozytorium (`git remote`) i wykonanie pierwszego commita na ga??zi `main`.
-- [x] **Architektura Gry:** Przygotowanie zarysu skrypt車w w j?zyku **Luau** (system `leaderstats` i obs?uga zdarze里 `ProximityPrompt`).
+### Kluczowe Funkcje Gry:
+* **System Napadow i Skokow:** Interaktywne lokacje (sklepy, bankomaty, sejfy) z dynamicznym odliczaniem czasu ucieczki i czasem odnowienia (cooldown).
+* **Dynamiczny Poziom Poszukiwan (Heat System):** Im wiekszy skok, tym wiecej gwiazdek poscigu! Zwiekszajacy sie poziom trudnosci i agresja policji.
+* **Fizyka i Tuning Pojazdow:** Model prowadzenia aut dostosowany do dynamicznych ucieczek, poslizgow i wymijania blokad drogowych.
+* **Ekonomia i Postep Gracza:** Zapisywanie gotowki, kupowanie broni, ekwipunku oraz unikalnych pojazdow (`DataStoreService`).
+* **Szybka Iteracja z AI:** Wykorzystanie narzedzi sztucznej inteligencji (Roblox Assistant / AI Scripting) do szybkiego tworzenia i optymalizacji kodu w Luau.
 
 ---
 
-## ??? Mapa Drogowa (Roadmap & Co Dalej?)
+## Stan Projektu i Wykonane Prace (Progress Log)
 
-- [ ] **Krok 1:** Zapisanie pliku gry `Game.rbxl` bezpo?rednio w folderze repozytorium.
-- [ ] **Krok 2:** Wygenerowanie i wdro?enie skryptu napadu na sklep przy pomocy asystenta AI.
-- [ ] **Krok 3:** Stworzenie systemu zapisu got車wki i poziom車w poszukiwa里 w `DataStoreService`.
-- [ ] **Krok 4:** Implementacja modeli pojazd車w z systemem tuningu.
-- [ ] **Krok 5:** Finalne testy gry z udzia?em graczy i oddanie projektu nauczycielowi.
+### Co zostalo zrobione do tej pory?
+- [x] **Konfiguracja SSH:** Wygenerowanie i dodanie klucza SSH (`ed25519`) na koncie GitHub dla bezpiecznego polaczenia.
+- [x] **Inicjalizacja Repozytorium:** Utworzenie struktury projektu, pliku `README.md` oraz `.gitignore` wykluczajacego zbedne pliki tymczasowe Robloxa (`*.lock`).
+- [x] **Polaczenie z Serwerem:** Poprawne skonfigurowanie zdalnego repozytorium (`git remote`) i wykonanie pierwszego commita na galezi `main`.
+- [x] **Architektura Gry:** Przygotowanie zarysu skryptow w jezyku **Luau** (system `leaderstats` i obsluga zdarzen `ProximityPrompt`).
 
 ---
 
-## ?? Technologie i Narz?dzia
+## Mapa Drogowa (Roadmap & Co Dalej?)
+
+- [ ] **Krok 1:** Zapisanie pliku gry `Game.rbxl` bezposrednio w folderze repozytorium.
+- [ ] **Krok 2:** Wygenerowanie i wdrozenie skryptu napadu na sklep przy pomocy asystenta AI.
+- [ ] **Krok 3:** Stworzenie systemu zapisu gotowki i poziomow poszukiwan w `DataStoreService`.
+- [ ] **Krok 4:** Implementacja modeli pojazdow z systemem tuningu.
+- [ ] **Krok 5:** Finalne testy gry z udzialem graczy i oddanie projektu nauczycielowi.
+
+---
+
+## Technologie i Narzedzia
 
 * **Silnik gry:** Roblox Studio
-* **J?zyk skryptowy:** Luau (Lua 5.1+)
+* **Jezyk skryptowy:** Luau (Lua 5.1+)
 * **Wsparcie programistyczne:** Roblox Assistant AI / GPT Script Gen
 * **System kontroli wersji:** Git & GitHub (autoryzacja SSH)
-* **?rodowisko terminala:** Git Bash / PowerShell
+* **Srodowisko terminala:** Git Bash / PowerShell
 
 ---
 
-## ?? ?ci?gawka dla Dewelopera (Git Workflow)
+## Sciegawka dla Dewelopera (Git Workflow)
 
-Gdy wprowadzane s? nowe zmiany w Roblox Studio, zapisujemy plik gry (`Ctrl + S`) i wklejamy w terminalu komendy:
+Gdy wprowadzane sa nowe zmiany w Roblox Studio, zapisujemy plik gry (`Ctrl + S`) i wklejamy w terminalu komendy:
 
 ```bash
 # 1. Pobranie ewentualnych zmian z serwera
 git pull
 
-# 2. Zaznaczenie wszystkich zmodyfikowanych plik車w
+# 2. Zaznaczenie wszystkich zmodyfikowanych plikow
 git add .
 
 # 3. Zapisanie wersji z opisem zmian
 git commit -m "Opis nowej funkcjonalnosci (np. dodano skrypt napadu)"
 
-# 4. Wysy?ka zmian na konto GitHub
+# 4. Wysylka zmian na konto GitHub
 git push
