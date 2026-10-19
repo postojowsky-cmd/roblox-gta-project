@@ -1,0 +1,14 @@
+digraph ERD {
+graph [label="Roblox City Heist - ERD",labelloc=t,ranksep=1.1];
+node [shape=record,style=filled,fillcolor=lightblue];
+gracz [label="{gracz|PK id_gracza: bigint|nazwa: varchar|gotowka: decimal|poziom_poszukiwan: int}"];
+pojazd [label="{pojazd|PK id_pojazdu: int|FK id_gracza: bigint|model: varchar|tuning: varchar}"];
+przedmiot [label="{przedmiot|PK id_przedmiotu: int|nazwa: varchar|cena: decimal}"];
+ekwipunek [label="{ekwipunek|PK id_ekwipunku: int|FK id_gracza: bigint|FK id_przedmiotu: int|ilosc: int}"];
+misja [label="{misja|PK id_misji: int|nazwa: varchar|nagroda: decimal}"];
+postep_misji [label="{postep_misji|PK id_postepu: int|FK id_gracza: bigint|FK id_misji: int|status: varchar}"];
+napad [label="{napad|PK id_napadu: int|FK id_gracza: bigint|cel: varchar|nagroda: decimal}"];
+bron [label="{bron|PK id_broni: int|FK id_przedmiotu: int|obrazenia: int}"];
+transakcja [label="{transakcja|PK id_transakcji: int|FK id_gracza: bigint|kwota: decimal|typ: varchar}"];
+edge [dir=none]; gracz -> pojazd [label="1 : 0..*"]; gracz -> ekwipunek [label="1 : 0..*"]; przedmiot -> ekwipunek [label="1 : 0..*"]; gracz -> postep_misji [label="1 : 0..*"]; misja -> postep_misji [label="1 : 0..*"]; gracz -> napad [label="1 : 0..*"]; przedmiot -> bron [label="1 : 0..1"]; gracz -> transakcja [label="1 : 0..*"];
+}
