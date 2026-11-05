@@ -1,0 +1,25 @@
+digraph UML {
+graph [rankdir=TB, bgcolor="white", pad="0.4", nodesep="0.65", ranksep="0.9", splines=ortho, fontname="DejaVu Sans", label="Roblox City Heist — diagram klas UML (model projektowy)", labelloc=t, fontsize=22, fontcolor="#17324d"];
+node [shape=record, style="rounded,filled", fillcolor="#eef5fc", color="#50749b", fontname="DejaVu Sans", fontsize=11, margin="0.18,0.12"];
+edge [color="#425b76", fontname="DejaVu Sans", fontsize=10, arrowsize=0.8];
+Player [label="{Player| - userId: number\l - name: string\l - cash: number\l - bankBalance: number\l - wantedLevel: number\l| + earnMoney(amount)\l + spendMoney(amount): boolean\l + setWantedLevel(level)\l}"];
+Vehicle [label="{Vehicle| - vehicleId: string\l - model: string\l - condition: number\l - color: string\l - upgrades: table\l| + spawn()\l + drive()\l + applyUpgrade(name)\l}"];
+Inventory [label="{Inventory| - items: table\l| + addItem(item, quantity)\l + removeItem(item, quantity)\l + hasItem(item): boolean\l}"];
+Item [label="{Item| - itemId: string\l - name: string\l - category: string\l - price: number\l| + use(player)\l}"];
+Weapon [label="{Weapon| - damage: number\l - magazineSize: number\l - ammo: number\l| + fire()\l + reload()\l}"];
+Mission [label="{Mission| - missionId: string\l - title: string\l - reward: number\l - status: string\l| + start(player)\l + complete(player)\l}"];
+Robbery [label="{Robbery| - robberyId: string\l - location: string\l - loot: number\l - cooldown: number\l| + begin(player)\l + finish(player)\l}"];
+Transaction [label="{Transaction| - transactionId: string\l - amount: number\l - type: string\l - timestamp: number\l| + record()\l}"];
+PoliceSystem [label="{PoliceSystem| - maxWantedLevel: number\l| + raiseHeat(player, points)\l + clearHeat(player)\l + dispatchUnits(player)\l}"];
+Player -> Vehicle [label="1 posiada 0..*", arrowhead=vee];
+Player -> Inventory [label="1 posiada 1", arrowhead=vee];
+Inventory -> Item [label="1 zawiera 0..*", arrowhead=vee];
+Weapon -> Item [arrowhead=empty, label="dziedziczy"];
+Player -> Mission [label="0..* wykonuje 0..*", arrowhead=vee];
+Player -> Robbery [label="1 wykonuje 0..*", arrowhead=vee];
+Player -> Transaction [label="1 ma 0..*", arrowhead=vee];
+PoliceSystem -> Player [style=dashed, arrowhead=open, label="monitoruje"];
+Robbery -> PoliceSystem [style=dashed, arrowhead=open, label="powiadamia"];
+Transaction -> Item [style=dashed, arrowhead=open, label="dotyczy 0..1"];
+Transaction -> Vehicle [style=dashed, arrowhead=open, label="dotyczy 0..1"];
+}
