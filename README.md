@@ -1,5 +1,30 @@
 # Roblox City Heist: Drive & Escape
 
+## Aktualny stan projektu — 16.11.2026
+
+**Status: grywalny prototyp w Roblox Studio; dalszy rozwoj w toku.** Ponizsze funkcje zostaly zbudowane i przetestowane w lokalnym pliku `Game.rbxl`.
+
+### Zrealizowane
+- [x] **Mapa CityBlockout:** drogi, chodniki, centrum Downtown, budynki i lokacje rozgrywki.
+- [x] **Trzy banki:** wnetrza, sejfy, drzwi skarbcow, napady z odliczaniem, nagrodami Money i cooldownem.
+- [x] **Ekonomia:** poczatkowe 5000 Money oraz wyplaty za udane napady (leaderstats).
+- [x] **Wanted i policja NPC:** poziom poszukiwan, poscig i aresztowanie gracza.
+- [x] **Wiezienie CityPrison:** cele, pietra, dziedziniec, stolowka, warsztat i dojazd.
+- [x] **Odsiadka:** licznik wyroku, prace skracajace czas oraz HUD.
+- [x] **Ucieczka:** ukryty wlaz, tunel, krata wyjsciowa i teleport poza wiezienie.
+- [x] **Straznicy NPC:** modele straznikow oraz reakcja na alarm.
+- [x] **Alarm wiezienny:** migajace czerwone swiatla i sygnal do reakcji straznikow.
+
+### Nastepne zadania
+- [ ] **AI straznikow 6H-6:** polaczenie patrolu i reakcji na alarm, wykrywanie uciekiniera, stabilny poscig oraz ponowne aresztowanie.
+- [ ] **Balans wiezienia:** trudniejsze prace, kara za nieudana ucieczke, testy kolizji i spawn pointow.
+- [ ] **Dalsza rozgrywka:** pojazdy, tuning, kolejne napady, trwaly zapis postepow i testy multiplayer.
+
+**Uwaga:** opis dotyczy stanu testowanego w Roblox Studio. Sam wpis w README nie aktualizuje binarnego pliku `Game.rbxl`; po kolejnych zmianach nalezy go zapisac i osobno wyslac do repozytorium.
+
+---
+
+
 > **Oficjalny projekt szkolny na zajecia zawodowe z zakresu programowania i kontroli wersji.**
 > 
 > *Zanurz sie w niebezpiecznym, tetniacym zyciem otwartym swiecie, gdzie liczy sie refleks, spryt i szybkie samochody. Przejmij kontrole nad ulicami miasta jako przestepca planujacy skoki zycia lub stan po stronie prawa i powstrzymaj fale przestepczosci!*
