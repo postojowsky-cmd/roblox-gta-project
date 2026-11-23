@@ -20,30 +20,44 @@ local function playerNear(player, part)
     return root and hum and hum.Health > 0 and (root.Position - part.Position).Magnitude <= 18
 end
 
-local interiorBuilder = require(script.Parent:WaitForChild("CityHeistShopInterior"))
+-- Shop interiors temporarily disabled until fitted to actual building geometry.
 
 for i = 1, 4 do
     local shop = locations:FindFirstChild("Shop_" .. i)
     if shop and shop:IsA("Model") then
-        local ok, terminal = pcall(function()
-            return interiorBuilder.build(shop, i)
-        end)
-        if ok and terminal then
-            terminals[i] = terminal
-            local prompt = terminal:FindFirstChild("OpenShop")
-            prompt.Triggered:Connect(function(player)
-                if playerNear(player, terminal) then
-                    event:FireClient(player, "Open", i)
-                end
-            end)
-            print("[CityHeistShop] Sklep " .. i .. ": wnetrze, kasa i zaplecze gotowe")
-        else
-            warn("[CityHeistShop] Blad budowania sklepu " .. i .. ": " .. tostring(terminal))
+        local cf, size = shop:GetBoundingBox()
+        print(string.format("[CityHeistShopGeometry] Shop_%d center=(%.1f,%.1f,%.1f) size=(%.1f,%.1f,%.1f)", i, cf.Position.X, cf.Position.Y, cf.Position.Z, size.X, size.Y, size.Z))
+        for _, obj in ipairs(shop:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                print(string.format("[CityHeistShopGeometry] Shop_%d part=%s size=(%.1f,%.1f,%.1f) pos=(%.1f,%.1f,%.1f) collide=%s",i,obj.Name,obj.Size.X,obj.Size.Y,obj.Size.Z,obj.Position.X,obj.Position.Y,obj.Position.Z,tostring(obj.CanCollide)))
+            end
         end
-    else
-        warn("[CityHeistShop] Nie znaleziono Shop_" .. i)
+        local old=shop:FindFirstChild("CityHeistShopEntrance")
+        if old then old:Destroy() end
+        local terminal=shop:FindFirstChild("CityHeistShopTerminal")
+        if not terminal then
+            terminal=Instance.new("Part")
+            terminal.Name="CityHeistShopTerminal";terminal.Size=Vector3.new(3,4,2)
+            terminal.Anchored=true;terminal.CanCollide=false;terminal.Transparency=0.4
+            terminal.Color=Color3.fromRGB(20,180,145)
+            terminal.CFrame=cf*CFrame.new(0,-size.Y/2+2.5,-size.Z/2-3)
+            terminal.Parent=shop
+        end
+        local prompt=terminal:FindFirstChild("OpenShop")
+        if not prompt then
+            prompt=Instance.new("ProximityPrompt");prompt.Name="OpenShop"
+            prompt.ActionText="Kup produkty";prompt.ObjectText="Sklep "..i
+            prompt.HoldDuration=0.3;prompt.MaxActivationDistance=12
+            prompt.RequiresLineOfSight=false;prompt.Parent=terminal
+        end
+        terminals[i]=terminal
+        prompt.Triggered:Connect(function(player)
+            if playerNear(player,terminal) then event:FireClient(player,"Open",i) end
+        end)
     end
 end
+local generated=workspace:FindFirstChild("CityHeistShopInteriors")
+if generated then generated:Destroy() end
 
 event.OnServerEvent:Connect(function(player, action, shopId, itemId)
     if action ~= "Buy" or type(shopId) ~= "number" or shopId % 1 ~= 0 then return end
