@@ -3,9 +3,9 @@
 local RS=game:GetService("RunService")
 if not RS:IsStudio() then return end
 local W=game:GetService("Workspace")
-if W:GetAttribute("CityInfrastructure86Running") then return end
-W:SetAttribute("CityInfrastructure86Running",true)
-print("[CityInfra86] START")
+if W:GetAttribute("CityInfrastructure87Running") then return end
+W:SetAttribute("CityInfrastructure87Running",true)
+print("[CityInfra87] START")
 
 local city=W:WaitForChild("CityBlockout",30)
 local roads=city and city:WaitForChild("Roads",30)
@@ -13,7 +13,7 @@ local ground=city and city:WaitForChild("Ground",30)
 local main=W:WaitForChild("CityHeistPrefabCity74",90)
 local extra=W:WaitForChild("CityHeistInfill81",90)
 if not (city and roads and ground and main and extra) then
-    warn("[CityInfra86] Missing map / prefab infrastructure, skipped")
+    warn("[CityInfra87] Missing map / prefab infrastructure, skipped")
     return
 end
 
@@ -23,7 +23,7 @@ while elapsed<60 and not (main:GetAttribute("PlacementComplete") and extra:GetAt
     elapsed+=.5
 end
 if not (main:GetAttribute("PlacementComplete") and extra:GetAttribute("PlacementComplete")) then
-    warn("[CityInfra86] Prefab placement did not complete; skipped to avoid overlap")
+    warn("[CityInfra87] Prefab placement did not complete; skipped to avoid overlap")
     return
 end
 -- Decoration generator already has a defined finish point when its parent
@@ -73,7 +73,7 @@ for _,part in ipairs(roads:GetDescendants()) do
         end
     end
 end
-if #allRoads<4 then warn("[CityInfra86] Invalid road bounds; skipped");root:Destroy();return end
+if #allRoads<4 then warn("[CityInfra87] Invalid road bounds; skipped");root:Destroy();return end
 
 -- Near-street sites: measure horizontal distance to the actual road
 -- rectangles rather than assuming a regular grid or building a new road.
@@ -109,19 +109,19 @@ end
 local function makeParking(index,x,y,z)
     local m=Instance.new("Model")
     m.Name="PublicParking_"..index;m.Parent=root
-    part(m,"ParkingSurface",Vector3.new(60,.28,40),
+    -- Compact 3-space lot suited to the actual city block size.
+    part(m,"ParkingSurface",Vector3.new(36,.28,26),
         CFrame.new(x,y+.12,z),palettes.asphalt,Enum.Material.Asphalt)
-    -- Six visible bays, each 9 studs wide, with a maneuvering aisle.
-    for slot=0,6 do
-        local sx=x-27+slot*9
-        part(m,"BayStripe",Vector3.new(.22,.04,17),
-            CFrame.new(sx,y+.29,z-9),palettes.line,nil,false)
+    for slot=0,3 do
+        local sx=x-15+slot*10
+        part(m,"BayStripe",Vector3.new(.22,.04,12),
+            CFrame.new(sx,y+.29,z-6),palettes.line,nil,false)
     end
-    part(m,"BayRearStripe",Vector3.new(54,.04,.22),
-        CFrame.new(x,y+.29,z-17.5),palettes.line,nil,false)
-    for _,sx in ipairs({-25,25}) do
-        part(m,"Bollard",Vector3.new(.85,3,.85),
-            CFrame.new(x+sx,y+1.5,z+17),
+    part(m,"BayRearStripe",Vector3.new(30,.04,.22),
+        CFrame.new(x,y+.29,z-12),palettes.line,nil,false)
+    for _,sx in ipairs({-16,16}) do
+        part(m,"Bollard",Vector3.new(.85,2.6,.85),
+            CFrame.new(x+sx,y+1.3,z+11),
             Color3.fromRGB(238,192,80),Enum.Material.Metal)
     end
     m:SetAttribute("DecorativeOnly",true)
@@ -129,39 +129,36 @@ end
 local function makeFuelStation(x,y,z)
     local m=Instance.new("Model")
     m.Name="FuelStation";m.Parent=root
-    part(m,"Forecourt",Vector3.new(70,.3,54),
+    -- Compact two-pump urban service station, fully inside a 46x36 plot.
+    part(m,"Forecourt",Vector3.new(46,.3,36),
         CFrame.new(x,y+.15,z),palettes.concrete,Enum.Material.Concrete)
-    -- Clear drive-through forecourt. Pumps and supports stay at the edges.
-    for _,dx in ipairs({-21,21}) do
-        part(m,"CanopyColumn",Vector3.new(2,15,2),
-            CFrame.new(x+dx,y+7.7,z),palettes.frame,Enum.Material.Metal)
+    for _,dx in ipairs({-17,17}) do
+        part(m,"CanopyColumn",Vector3.new(1.6,12,1.6),
+            CFrame.new(x+dx,y+6.15,z),palettes.frame,Enum.Material.Metal)
     end
-    part(m,"FuelCanopy",Vector3.new(57,2,36),
-        CFrame.new(x,y+16,z),palettes.petrol,Enum.Material.Metal)
-    part(m,"FuelCanopyTrim",Vector3.new(59,.8,37),
-        CFrame.new(x,y+17.35,z),palettes.petrolLight,Enum.Material.Neon,false)
-    for _,dx in ipairs({-12,12}) do
-        for _,dz in ipairs({-7,7}) do
-            part(m,"PumpIsland",Vector3.new(4,.5,9),
-                CFrame.new(x+dx,y+.55,z+dz),
-                palettes.concrete,Enum.Material.Concrete)
-            local pump=part(m,"FuelPump",Vector3.new(2.7,5.7,3.1),
-                CFrame.new(x+dx,y+3.7,z+dz),
-                palettes.petrol,Enum.Material.Metal)
-            pump:SetAttribute("VisualOnly",true)
-            part(m,"PumpDisplay",Vector3.new(2.1,1.4,.1),
-                CFrame.new(x+dx,y+4.6,z+dz-1.6),
-                Color3.fromRGB(173,222,231),Enum.Material.Glass,false)
-        end
+    part(m,"FuelCanopy",Vector3.new(40,1.5,25),
+        CFrame.new(x,y+12.9,z),palettes.petrol,Enum.Material.Metal)
+    part(m,"FuelCanopyTrim",Vector3.new(41,.5,26),
+        CFrame.new(x,y+13.9,z),palettes.petrolLight,Enum.Material.Neon,false)
+    for _,dx in ipairs({-10,10}) do
+        part(m,"PumpIsland",Vector3.new(4,.5,8),
+            CFrame.new(x+dx,y+.55,z),palettes.concrete,Enum.Material.Concrete)
+        part(m,"FuelPump",Vector3.new(2.6,5,3.2),
+            CFrame.new(x+dx,y+3.2,z),palettes.petrol,Enum.Material.Metal)
+        part(m,"PumpDisplay",Vector3.new(2,1.2,.1),
+            CFrame.new(x+dx,y+4.1,z-1.65),
+            Color3.fromRGB(173,222,231),Enum.Material.Glass,false)
     end
     m:SetAttribute("DecorativeOnly",true)
 end
 
+-- Search fine-grained coordinates around real streets, not a coarse
+-- 24-stud grid. Every proposed lot must pass full-volume collision tests.
 local points={}
-for x=minX+51,maxX-51,24 do
-    for z=minZ+51,maxZ-51,24 do
+for x=minX+30,maxX-30,12 do
+    for z=minZ+30,maxZ-30,12 do
         local street=roadDistance(x,z)
-        if street>=9 and street<=47 then
+        if street>=14 and street<=65 then
             table.insert(points,{x=x,z=z,street=street,
                 ring=math.abs(x-(minX+maxX)/2)+math.abs(z-(minZ+maxZ)/2)})
         end
@@ -171,35 +168,51 @@ table.sort(points,function(a,b)
     if a.street==b.street then return a.ring>b.ring end
     return a.street<b.street
 end)
-
-local parking,fuel=0,0
-for _,v in ipairs(points) do
-    if parking>=2 and fuel>=1 then break end
-    local y=groundY(v.x,v.z)
-    if y then
-        local kind
-        local w,d
-        if parking<2 then kind="parking";w=60;d=40
-        else kind="fuel";w=70;d=54 end
-        local flat=true
-        for _,dx in ipairs({-w/2-3,w/2+3}) do
-            for _,dz in ipairs({-d/2-3,d/2+3}) do
-                local yy=groundY(v.x+dx,v.z+dz)
-                if not yy or math.abs(yy-y)>1.3 then flat=false end
-            end
-        end
-        if flat and vacant(v.x,y,v.z,w,d) then
-            if kind=="parking" then
-                parking+=1;makeParking(parking,v.x,y,v.z)
-                print(string.format("[CityInfra86] PARKING %d X %.0f Z %.0f",
-                    parking,v.x,v.z))
+local counts={ground=0,flat=0,blocked=0,passed=0}
+local function placeType(kind,required,w,d)
+    local placed=0
+    for _,v in ipairs(points) do
+        if placed>=required then break end
+        -- A parking/fuel plot must be beside the street, not on its surface.
+        local minimum=math.min(w,d)/2+6
+        if v.street>=minimum and v.street<=minimum+30 then
+            local y=groundY(v.x,v.z)
+            if not y then
+                counts.ground+=1
             else
-                fuel+=1;makeFuelStation(v.x,y,v.z)
-                print(string.format("[CityInfra86] FUEL STATION X %.0f Z %.0f",
-                    v.x,v.z))
+                local flat=true
+                for _,dx in ipairs({-w/2-2,w/2+2}) do
+                    for _,dz in ipairs({-d/2-2,d/2+2}) do
+                        local yy=groundY(v.x+dx,v.z+dz)
+                        if not yy or math.abs(yy-y)>1.3 then flat=false end
+                    end
+                end
+                if not flat then
+                    counts.flat+=1
+                elseif not vacant(v.x,y,v.z,w,d) then
+                    counts.blocked+=1
+                else
+                    placed+=1
+                    counts.passed+=1
+                    if kind=="fuel" then
+                        makeFuelStation(v.x,y,v.z)
+                    else
+                        makeParking(placed,v.x,y,v.z)
+                    end
+                    print(string.format("[CityInfra87] PLACED %s %d at X %.0f Z %.0f",
+                        kind,placed,v.x,v.z))
+                end
             end
         end
     end
+    return placed
 end
-print(string.format("[CityInfra86] DONE: %d parking lots, %d fuel stations; existing 28 prefab buildings and road grid unchanged",
+-- Search independently for both uses. Failure to locate the first parking
+-- must never suppress searching for a gas station.
+local fuel=placeType("fuel",1,46,36)
+local parking=placeType("parking",2,36,26)
+print(string.format("[CityInfra87] DIAGNOSTICS: %d plots considered; %d ground failures, %d uneven, %d occupied, %d clear",
+    #points,counts.ground,counts.flat,counts.blocked,counts.passed))
+
+print(string.format("[CityInfra87] DONE: %d parking lots, %d fuel stations; existing 28 prefab buildings and road grid unchanged",
     parking,fuel))
