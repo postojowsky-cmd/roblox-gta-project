@@ -20,42 +20,26 @@ local function playerNear(player, part)
     return root and hum and hum.Health > 0 and (root.Position - part.Position).Magnitude <= 18
 end
 
+local interiorBuilder = require(script.Parent:WaitForChild("CityHeistShopInterior"))
+
 for i = 1, 4 do
     local shop = locations:FindFirstChild("Shop_" .. i)
     if shop and shop:IsA("Model") then
-        local cf, size = shop:GetBoundingBox()
-        local terminal = shop:FindFirstChild("CityHeistShopTerminal")
-        if not terminal then
-            terminal = Instance.new("Part")
-            terminal.Name = "CityHeistShopTerminal"
-            terminal.Size = Vector3.new(3, 5, 3)
-            terminal.Anchored = true
-            terminal.CanCollide = false
-            terminal.CanTouch = false
-            terminal.Transparency = 0.35
-            terminal.Material = Enum.Material.Neon
-            terminal.Color = Color3.fromRGB(20, 200, 160)
-            terminal.CFrame = cf * CFrame.new(0, -size.Y / 2 + 3, -size.Z / 2 - 3)
-            terminal.Parent = shop
-        end
-        local prompt = terminal:FindFirstChild("OpenShop")
-        if not prompt then
-            prompt = Instance.new("ProximityPrompt")
-            prompt.Name = "OpenShop"
-            prompt.ActionText = "Otworz sklep"
-            prompt.ObjectText = "Sklep " .. i
-            prompt.HoldDuration = 0.3
-            prompt.MaxActivationDistance = 12
-            prompt.RequiresLineOfSight = false
-            prompt.Parent = terminal
-        end
-        terminals[i] = terminal
-        prompt.Triggered:Connect(function(player)
-            if playerNear(player, terminal) then
-                event:FireClient(player, "Open", i)
-            end
+        local ok, terminal = pcall(function()
+            return interiorBuilder.build(shop, i)
         end)
-        print("[CityHeistShop] Sklep " .. i .. " aktywny")
+        if ok and terminal then
+            terminals[i] = terminal
+            local prompt = terminal:FindFirstChild("OpenShop")
+            prompt.Triggered:Connect(function(player)
+                if playerNear(player, terminal) then
+                    event:FireClient(player, "Open", i)
+                end
+            end)
+            print("[CityHeistShop] Sklep " .. i .. ": wnetrze, kasa i zaplecze gotowe")
+        else
+            warn("[CityHeistShop] Blad budowania sklepu " .. i .. ": " .. tostring(terminal))
+        end
     else
         warn("[CityHeistShop] Nie znaleziono Shop_" .. i)
     end
