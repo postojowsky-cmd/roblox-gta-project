@@ -306,15 +306,20 @@ else
     warn("[Prison62] Side parking works; separate city access route not yet clear")
 end
 
--- Walkway follows the EXTERIOR front of the prison; no line through the cells.
-local frontOutside=gate+outward*19
-local lotSide=lotCF:PointToWorldSpace(Vector3.new(-chosen.side*WIDTH/2+2,0,0))
-local gY=groundAt(frontOutside) or floor
-local sY=groundAt(lotSide) or floor
-roadway("VisitorFootpath",Vector3.new(lotSide.X,sY+0.45,lotSide.Z),
-    Vector3.new(frontOutside.X,gY+0.45,frontOutside.Z),8,concrete)
-roadway("GateFootpath",Vector3.new(frontOutside.X,gY+0.45,frontOutside.Z),
-    Vector3.new(gate.X,gY+0.45,gate.Z),8,concrete)
+-- Do not build the old long diagonal bridge between the parking and gate.
+-- Preserve the prison walls. Add only a short pedestrian exit on the lot's
+-- outer edge; the rest of the sidewalk network will be fitted with the map.
+local sidewalkEnd=lotCF:PointToWorldSpace(Vector3.new(-chosen.side*(WIDTH/2+1),0,0))
+local sidewalkStart=lotCF:PointToWorldSpace(Vector3.new(-chosen.side*(WIDTH/2-9),0,0))
+local pathY=groundAt(sidewalkEnd) or floor
+local a=Vector3.new(sidewalkStart.X,pathY+0.35,sidewalkStart.Z)
+local b=Vector3.new(sidewalkEnd.X,pathY+0.35,sidewalkEnd.Z)
+local d=horizontal(b-a)
+if d.Magnitude>2 then
+    local cf=CFrame.lookAt((a+b)*0.5,b)
+    create("ParkingPedestrianExit",Vector3.new(6,0.26,d.Magnitude+1),
+        cf,concrete,Enum.Material.Concrete,true)
+end
 
 local function scenery(localX,localZ)
     local pos=lotCF:PointToWorldSpace(Vector3.new(localX,0,localZ))
@@ -350,4 +355,4 @@ for _,x in ipairs({-WIDTH/2-2,WIDTH/2+2}) do
     lamp(x,-28)
     lamp(x,28)
 end
-print("[Prison62] Exterior side parking ready; prison courtyard remains unchanged.")
+print("[Prison63] Side parking retained; diagonal bridge removed; prison walls unchanged.")
