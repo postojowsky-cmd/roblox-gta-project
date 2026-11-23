@@ -6,7 +6,7 @@ if not RunService:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityPrefab79Running") then return end
-W:SetAttribute("CityPrefab77Running",true)
+W:SetAttribute("CityPrefab79Running",true)
 
 local city=W:WaitForChild("CityBlockout",30)
 local stage=SS:WaitForChild("CityHeistAssetStaging",45)
