@@ -14,8 +14,11 @@ local function update()
     local available = active:FindFirstChild(vehicleId) ~= nil
     for button in pairs(buttons) do
         if button.Parent then
-            button.Visible = available
+            button.Visible = true
             button.Active = available and not pending
+            button.AutoButtonColor = available and not pending
+            button.BackgroundColor3 = available and Color3.fromRGB(75, 93, 115) or Color3.fromRGB(48, 57, 70)
+            button.TextColor3 = available and Color3.fromRGB(235, 245, 255) or Color3.fromRGB(155, 165, 180)
             button.Text = pending and "CHOWANIE..." or "SCHOWAJ POJAZD"
         end
     end
