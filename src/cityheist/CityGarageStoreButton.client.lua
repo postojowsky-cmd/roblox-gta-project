@@ -7,11 +7,12 @@ local remote = ReplicatedStorage:WaitForChild("CityHeistGarageStoreRequest")
 local active = workspace:WaitForChild("CityHeistGarageSpawned")
 local vehicleId = "Vehicle_" .. player.UserId
 local hooked = setmetatable({}, {__mode = "k"})
+local buttons = setmetatable({}, {__mode = "k"})
 local pending = false
 
 local function update()
     local available = active:FindFirstChild(vehicleId) ~= nil
-    for button in pairs(hooked) do
+    for button in pairs(buttons) do
         if button.Parent then
             button.Visible = available
             button.Active = available and not pending
@@ -48,7 +49,7 @@ local function tryAttach(row)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = button
-    hooked[button] = true
+    buttons[button] = true
     button.MouseButton1Click:Connect(function()
         if pending or not active:FindFirstChild(vehicleId) then return end
         pending = true
