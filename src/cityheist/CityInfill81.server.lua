@@ -5,8 +5,8 @@ local RS=game:GetService("RunService")
 if not RS:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-if W:GetAttribute("CityInfill81Running") then return end
-W:SetAttribute("CityInfill81Running",true)
+if W:GetAttribute("CityInfill82Running") then return end
+W:SetAttribute("CityInfill82Running",true)
 
 local city=W:WaitForChild("CityBlockout",30)
 local roads=city and city:WaitForChild("Roads",30)
@@ -37,24 +37,27 @@ for _,m in ipairs(source:GetDescendants()) do
             if obj:IsA("BasePart") then count+=1
             elseif obj:IsA("Model") then nested+=1 end
         end
-        if count>=12 and count<=650 and nested<=6 then
+        if count>=8 and count<=800 and nested<=6 then
             local ok,box,size=pcall(function()return m:GetBoundingBox()end)
-            if ok and size and size.X>=12 and size.Z>=12
-                and size.X<=85 and size.Z<=85
-                and size.Y>=10 and size.Y<=100 then
+            if ok and size and size.X>=9 and size.Z>=9
+                and size.X<=105 and size.Z<=105
+                and size.Y>=8 and size.Y<=150 then
                 table.insert(candidates,{model=m,size=size,height=size.Y,count=count})
             end
         end
     end
 end
--- The accessible kit might contain no full low-rise prefabs. In that case
--- skip rather than misusing a wall fragment as an entire building.
+-- Match the dimensions already proven by the main city builder and then
+-- sort by height; the first models are the shortest *available* buildings.
 table.sort(candidates,function(a,b)
     if a.height==b.height then return a.model.Name<b.model.Name end
     return a.height<b.height
 end)
+print(string.format("[CityInfill82] %d usable candidates; height range %.0f..%.0f",
+    #candidates,#candidates>0 and candidates[1].height or 0,
+    #candidates>0 and candidates[#candidates].height or 0))
 if #candidates==0 then
-    warn("[CityInfill81] No small COMPLETE prefab models available in current kit; no buildings added")
+    warn("[CityInfill82] No complete prefab buildings match proven city generator criteria; no buildings added")
     return
 end
 
@@ -131,7 +134,7 @@ for _,pt in ipairs(points) do
     local y=surface(pt.x,pt.z)
     if y then
         for j=1,attempts do
-            local entry=candidates[(count+j-1)%attempts+1]
+            local entry=candidates[(j-1)%attempts+1]
             local sz=entry.size
             local flat=true
             for _,dx in ipairs({-sz.X/2-3,sz.X/2+3}) do
@@ -155,7 +158,7 @@ for _,pt in ipairs(points) do
                 local bottom=box.Position.Y-actual.Y/2
                 model:PivotTo(model:GetPivot()+Vector3.new(0,y-bottom+.1,0))
                 count+=1
-                print(string.format("[CityInfill81] PLACED %02d %s | %.0fx%.0fx%.0f | X %.0f Z %.0f",
+                print(string.format("[CityInfill82] PLACED %02d %s | %.0fx%.0fx%.0f | X %.0f Z %.0f",
                     count,entry.model.Name,sz.X,sz.Y,sz.Z,pt.x,pt.z))
                 break
             end
@@ -165,5 +168,5 @@ end
 result:SetAttribute("PlacementComplete",true)
 result:SetAttribute("BuildingCount",count)
 print(string.format(
-    "[CityInfill81] DONE: %d extra lower-rise prefab buildings, %d eligible prefabs; original 20 and city roads unchanged",
+    "[CityInfill82] DONE: %d extra prefabs selected shortest-first, %d eligible prefabs; original 20 and city roads unchanged",
     count,#candidates))
