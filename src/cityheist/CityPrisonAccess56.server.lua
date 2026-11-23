@@ -13,6 +13,14 @@ if not (city and prison and roads) then
     return
 end
 
+-- Prevent duplicate Rojo/Studio script copies from building two overlapping lots.
+-- Attribute assignment has no yield, so only the first running copy builds.
+if Workspace:GetAttribute("CityPrisonAccess61Started") then
+    print("[Prison61] Duplicate builder suppressed")
+    return
+end
+Workspace:SetAttribute("CityPrisonAccess61Started", true)
+
 -- The prison-placement script moves the model 4 seconds after startup.
 -- Build this layout only after the new site has been decided.
 local elapsed = 0
