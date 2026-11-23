@@ -27,3 +27,8 @@
 - Zachowywać działające funkcje, robić bezpieczne punkty powrotu.
 - Nie wracać teraz do więzienia (wcześniej odłożone).
 - Kolejny krok: ocena obecnego stanu mapy i banków, a następnie wybór pierwszego brakującego elementu MVP.
+
+## Test 23.11.2026 — napad MVP
+- Uzytkownik potwierdzil: po 30 sekundach napadu otrzymuje pieniadze; policja pojawia sie dopiero po wyplacie.
+- BankPursuitDelay.server.lua dziala w Studio; etap napadow MVP zaliczony.
+- Kolejny priorytet: sklepy i podstawowe interakcje / ekonomia, bez dopracowywania policji.
