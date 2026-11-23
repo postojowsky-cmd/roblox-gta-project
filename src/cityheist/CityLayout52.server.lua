@@ -1,4 +1,4 @@
--- City Heist step 53: road-aware building placement (Studio Play preview only).
+-- City Heist step 54: bounded road-aware building placement (Studio Play preview only).
 -- Never changes Roads, and never commits placement into the saved Studio map.
 local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
@@ -7,7 +7,7 @@ local city=workspace:WaitForChild("CityBlockout",20)
 local locations=city and city:WaitForChild("GameplayLocations",20)
 local roads=city and city:FindFirstChild("Roads")
 if not locations or not roads then
-    warn("[CityLayout53] Missing GameplayLocations or Roads; preserving original positions")
+    warn("[CityLayout54] Missing GameplayLocations or Roads; preserving original positions")
     return
 end
 
@@ -43,7 +43,7 @@ for _,obj in ipairs(roads:GetDescendants()) do
     end
 end
 if #roadParts==0 then
-    warn("[CityLayout53] No road parts detected: no buildings moved")
+    warn("[CityLayout54] No road parts detected: no buildings moved")
     return
 end
 
@@ -100,17 +100,76 @@ local function intersectsRoad(cf,size)
     return false
 end
 
-local function overlapsOther(cf,size,occupied)
-    local p=cf.Position
-    for _,other in ipairs(occupied) do
-        local q=other.cf.Position
-        local clearance=math.max(size.X,size.Z)/2+math.max(other.size.X,other.size.Z)/2+16
-        if (Vector2.new(p.X-q.X,p.Z-q.Z)).Magnitude<clearance then return true end
+-- Use actual road network bounds, not the original cluster's center.
+local minX,maxX,minZ,maxZ=math.huge,-math.huge,math.huge,-math.huge
+for _,road in ipairs(roadParts) do
+    for _,p in ipairs(corners(road.CFrame,road.Size,0)) do
+        minX=math.min(minX,p.X);maxX=math.max(maxX,p.X)
+        minZ=math.min(minZ,p.Z);maxZ=math.max(maxZ,p.Z)
     end
-    return false
+end
+local mapCenter=Vector2.new((minX+maxX)/2,(minZ+maxZ)/2)
+local mapHalf=Vector2.new((maxX-minX)/2,(maxZ-minZ)/2)
+local inset=65
+print(string.format("[CityLayout54] Road area X %.0f..%.0f Z %.0f..%.0f",minX,maxX,minZ,maxZ))
+
+-- Static buildings and other gameplay structures must remain untouched.
+local obstacles={}
+local function registerObstacle(model)
+    if not model:IsA("Model") then return end
+    local ok,cf,size=pcall(function()return model:GetBoundingBox() end)
+    if ok and size.X>3 and size.Z>3 then
+        table.insert(obstacles,{cf=cf,size=size})
+    end
+end
+for _,folderName in ipairs({"Downtown","CityLocations"}) do
+    local folder=city:FindFirstChild(folderName)
+    if folder then
+        for _,obj in ipairs(folder:GetChildren()) do
+            if obj:IsA("Model") then registerObstacle(obj) end
+        end
+    end
+end
+for _,obj in ipairs(locations:GetChildren()) do
+    if obj:IsA("Model") and not models[obj.Name] then registerObstacle(obj) end
 end
 
--- Preserve existing buildings as obstacles until they are relocated.
+-- SAT rectangle intersection, including rotations.
+local function overlaps(cf,size,other,margin)
+    local a=corners(cf,size,margin)
+    local b=corners(other.cf,other.size,margin)
+    local axes={
+        Vector2.new(cf.RightVector.X,cf.RightVector.Z),
+        Vector2.new(cf.LookVector.X,cf.LookVector.Z),
+        Vector2.new(other.cf.RightVector.X,other.cf.RightVector.Z),
+        Vector2.new(other.cf.LookVector.X,other.cf.LookVector.Z)
+    }
+    for _,axis in ipairs(axes) do
+        if axis.Magnitude>0.001 then
+            axis=axis.Unit
+            local amin,amax,bmin,bmax=math.huge,-math.huge,math.huge,-math.huge
+            for _,p in ipairs(a) do
+                local d=p.X*axis.X+p.Z*axis.Y
+                amin=math.min(amin,d);amax=math.max(amax,d)
+            end
+            for _,p in ipairs(b) do
+                local d=p.X*axis.X+p.Z*axis.Y
+                bmin=math.min(bmin,d);bmax=math.max(bmax,d)
+            end
+            if amax<bmin or bmax<amin then return false end
+        end
+    end
+    return true
+end
+
+local function insideCity(cf,size)
+    for _,p in ipairs(corners(cf,size,15)) do
+        if p.X<minX+inset or p.X>maxX-inset
+            or p.Z<minZ+inset or p.Z>maxZ-inset then return false end
+    end
+    return true
+end
+
 local occupied={}
 for _,name in ipairs(names) do
     local m=models[name]
@@ -119,6 +178,9 @@ for _,name in ipairs(names) do
         occupied[name]={cf=cf,size=size}
     end
 end
+
+-- Grid of candidates across real city blocks, rather than expanding outside
+-- the map. Prefer the requested quadrant, but only accept clear plots.
 local moved=0
 for _,name in ipairs(names) do
     local m=models[name]
@@ -127,37 +189,47 @@ for _,name in ipairs(names) do
         local offset,size=footprint(m)
         occupied[name]=nil
         local goal=targets[name]
+        local desired=Vector2.new(
+            mapCenter.X+goal.X/550*mapHalf.X*0.72,
+            mapCenter.Y+goal.Y/550*mapHalf.Y*0.72
+        )
+        local candidates={}
+        for x=minX+inset,maxX-inset,45 do
+            for z=minZ+inset,maxZ-inset,45 do
+                local p=Vector2.new(x,z)
+                local distance=(p-desired).Magnitude
+                table.insert(candidates,{x=x,z=z,score=distance})
+            end
+        end
+        table.sort(candidates,function(a,b)return a.score<b.score end)
         local chosen=nil
-        -- First try the desired district, then search nearby grid plots.
-        -- Every candidate must avoid road surfaces and all other buildings.
-        for radius=0,660,110 do
-            for dx=-radius,radius,110 do
-                for dz=-radius,radius,110 do
-                    if math.max(math.abs(dx),math.abs(dz))==radius then
-                        local p=Vector3.new(center.X+goal.X+dx,old.Position.Y,center.Z+goal.Y+dz)
-                        local pivot=CFrame.new(p)*old.Rotation
-                        local boundsCF=pivot*offset
-                        if not intersectsRoad(boundsCF,size) and not overlapsOther(boundsCF,size,occupied) then
-                            chosen=pivot
-                            break
-                        end
+        for _,candidate in ipairs(candidates) do
+            local pivot=CFrame.new(candidate.x,old.Position.Y,candidate.z)*old.Rotation
+            local cf=pivot*offset
+            if insideCity(cf,size) and not intersectsRoad(cf,size) then
+                local blocked=false
+                for _,other in ipairs(obstacles) do
+                    if overlaps(cf,size,other,12) then blocked=true;break end
+                end
+                if not blocked then
+                    for _,other in pairs(occupied) do
+                        if overlaps(cf,size,other,14) then blocked=true;break end
                     end
                 end
-                if chosen then break end
+                if not blocked then chosen=pivot;break end
             end
-            if chosen then break end
         end
         if chosen then
             m:PivotTo(chosen)
-            m:SetAttribute("CityLayout53Moved",true)
+            m:SetAttribute("CityLayout54Moved",true)
             local cf,newSize=m:GetBoundingBox()
             occupied[name]={cf=cf,size=newSize}
             moved+=1
-            print(string.format("[CityLayout53] %s moved to X %.0f Z %.0f (road clear)",name,cf.Position.X,cf.Position.Z))
+            print(string.format("[CityLayout54] %s -> X %.0f Z %.0f",name,cf.Position.X,cf.Position.Z))
         else
             occupied[name]={cf=old*offset,size=size}
-            warn("[CityLayout53] No safe plot for "..name.."; original location preserved")
+            warn("[CityLayout54] No safe city plot for "..name.."; left unchanged")
         end
     end
 end
-print(string.format("[CityLayout53] %d/%d relocated; roads unchanged; preview only",moved,count))
+print(string.format("[CityLayout54] %d/%d moved; road and downtown footprints protected; preview only",moved,count))
