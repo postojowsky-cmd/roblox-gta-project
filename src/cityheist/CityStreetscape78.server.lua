@@ -8,7 +8,7 @@ if not city then return end
 
 -- Non-yielding guard: some old Studio copies coexist with Rojo scripts.
 if Workspace:GetAttribute("CityStreetscape79Running") then return end
-Workspace:SetAttribute("CityStreetscape78Running",true)
+Workspace:SetAttribute("CityStreetscape79Running",true)
 
 local roads = city:WaitForChild("Roads",30)
 local ground = city:WaitForChild("Ground",30)
@@ -33,7 +33,7 @@ end
 local old=Workspace:FindFirstChild("CityHeistStreetscape79")
 if old then old:Destroy() end
 local folder=Instance.new("Folder")
-folder.Name="CityHeistStreetscape78"
+folder.Name="CityHeistStreetscape79"
 folder:SetAttribute("StudioPreview",true)
 folder.Parent=Workspace
 
@@ -178,5 +178,5 @@ for index,model in ipairs(buildings) do
     end
 end
 print(string.format(
-    "[CityStreetscape78] %d prefab buildings checked. Added %d trees, %d lamps, %d benches; existing roads and buildings unchanged.",
+    "[CityStreetscape79] %d prefab buildings checked. Added %d trees, %d lamps, %d benches; existing roads and buildings unchanged.",
     #buildings,placed.tree,placed.lamp,placed.bench))
