@@ -4,7 +4,6 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local Fix = require(script.Parent:WaitForChild("SaabVisualFix"))
 local Placement = require(script.Parent:WaitForChild("GroundPlacement"))
-local Wheels = require(script.Parent:WaitForChild("SaabWheelAnimator"))
 
 local source = ServerStorage:WaitForChild("CityHeistVehicles"):WaitForChild("Saab_9_3_Turbo_X_Driveable")
 local name = "CityHeist_SaabVisualTest"
@@ -18,7 +17,7 @@ local car = source:Clone()
 car.Name = name
 
 -- Z poprzednich pomiarow: kola sa 1.716 studa ponizej PhysicsSupport.
--- Przesuwamy tylko wizualna karoserie; naped, fotel i podpora bez zmian.
+-- Przesuwamy tylko wizualna karoserie; kola pozostaja nieruchome do czasu bezpiecznej animacji.
 local delta = 1.71623
 local count, removed = Fix.raiseBody(car, delta)
 
@@ -34,6 +33,5 @@ end
 
 Placement.place(car, hit.Position, 0.3)
 car.Parent = Workspace
-Wheels.attach(car)
 print(("[SaabVisualTest] Gotowe: %s | przesunieto %d czesci | usunieto %d spawow | delta=%.3f"):format(name, count, removed, delta))
 print("[SaabVisualTest] Wsiadz do testowego Saaba i sprawdz wyglad oraz jazde. Zmiany nie zapisuja sie po Stop.")
