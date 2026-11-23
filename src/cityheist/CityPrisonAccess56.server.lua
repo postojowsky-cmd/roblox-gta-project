@@ -62,7 +62,8 @@ for _,road in ipairs(roads:GetDescendants()) do
         end
     end
 end
-local surfaceY=bestPoint and bestPoint.Y+0.12 or gate.Y-3
+-- Use the actual prison entrance height, NOT a distant city road (234 studs away).
+local surfaceY=math.min(left.Position.Y-left.Size.Y/2,right.Position.Y-right.Size.Y/2)+0.12
 local center=Vector3.new(parkingCenter.X,surfaceY,parkingCenter.Z)
 -- Local +Z faces the prison's opposite direction, leaving the entry open.
 local facing=CFrame.lookAt(center,Vector3.new(gate.X,surfaceY,gate.Z))
@@ -114,9 +115,9 @@ for _,z in ipairs({-23,23}) do
 end
 -- Broad, short apron between prison entrance and parking; no 218-stud strip.
 local entryPoint=Vector3.new(gate.X,surfaceY,gate.Z)
-local nearEdge=facing:PointToWorldSpace(Vector3.new(0,0,-parkingDepth/2+2))
+local nearEdge=facing:PointToWorldSpace(Vector3.new(0,0,parkingDepth/2-2))
 local delta=Vector3.new(nearEdge.X-entryPoint.X,0,nearEdge.Z-entryPoint.Z)
-if delta.Magnitude>3 and delta.Magnitude<45 then
+if delta.Magnitude>3 and delta.Magnitude<60 then
     local middle=(entryPoint+nearEdge)/2
     local linkCF=CFrame.lookAt(middle,nearEdge)
     part("GateApron",Vector3.new(23,0.32,delta.Magnitude+3),
@@ -124,7 +125,7 @@ if delta.Magnitude>3 and delta.Magnitude<45 then
 end
 -- Entrance-side bollards and soft lights, kept away from the drive aisle.
 for _,x in ipairs({-45,45}) do
-    local base=facing:PointToWorldSpace(Vector3.new(x,0,-34))
+    local base=facing:PointToWorldSpace(Vector3.new(x,0,34))
     local post=part("ParkingLightPost",Vector3.new(0.7,12,0.7),
         CFrame.new(base+Vector3.new(0,6,0)),Color3.fromRGB(65,70,77),Enum.Material.Metal,true)
     local lamp=part("ParkingLamp",Vector3.new(2.8,0.5,2.8),
@@ -132,4 +133,4 @@ for _,x in ipairs({-45,45}) do
     local light=Instance.new("PointLight")
     light.Range=38;light.Brightness=2;light.Parent=lamp
 end
-print(string.format("[Prison59] Parking 100x76 placed at prison gate; nearest road %.0f studs away",bestDist))
+print(string.format("[Prison59] Parking 100x76 placed at prison gate; nearest city road %.0f studs away (not used for parking height)",bestDist))
