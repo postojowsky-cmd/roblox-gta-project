@@ -16,97 +16,105 @@ local function textSign(parent,name,text,cf,size)
     t.TextColor3=Color3.fromRGB(245,245,245);t.Parent=gui
 end
 function Builder.build(shop,index)
+    local body=shop:FindFirstChild("BuildingBody")
+    local entrance=shop:FindFirstChild("EntranceDoor")
+    local foundation=shop:FindFirstChild("Foundation")
+    if not (body and body:IsA("BasePart") and entrance and entrance:IsA("BasePart") and foundation and foundation:IsA("BasePart")) then
+        error("Missing original BuildingBody / EntranceDoor / Foundation in Shop_"..index)
+    end
     local old=shop:FindFirstChild("CityHeistShopTerminal")
     if old then old:Destroy() end
     local portal=shop:FindFirstChild("CityHeistShopEntrance")
     if portal then portal:Destroy() end
-    local interiors=workspace:FindFirstChild("CityHeistShopInteriors")
-    if not interiors then
-        interiors=Instance.new("Folder");interiors.Name="CityHeistShopInteriors";interiors.Parent=workspace
+    local previous=shop:FindFirstChild("CityHeistFittedInterior")
+    if previous then previous:Destroy() end
+    local room=Instance.new("Model");room.Name="CityHeistFittedInterior";room.Parent=shop
+    -- Use the REAL building footprint, not its bounding box or a separate building.
+    local floorY=foundation.Position.Y+foundation.Size.Y/2
+    local cf=body.CFrame
+    local function at(x,y,z)
+        return cf*CFrame.new(x,floorY-body.Position.Y+y,z)
     end
-    local existing=interiors:FindFirstChild("Interior_"..index)
-    if existing then existing:Destroy() end
-    local room=Instance.new("Model");room.Name="Interior_"..index;room.Parent=interiors
-    local exteriorCF,extSize=shop:GetBoundingBox()
-    -- Build a connected walk-in storefront extension in front of each existing building.
-    -- Front faces negative local Z, no existing facade parts are removed.
-    local base=exteriorCF*CFrame.new(0,-extSize.Y/2,-extSize.Z/2-19)
-    local function at(x,y,z) return base*CFrame.new(x,y,z) end
-    local wall=Color3.fromRGB(211,215,216)
-    local tile=Color3.fromRGB(96,103,109)
-    local trim=Color3.fromRGB(35,50,58)
-    make(room,"ShopFloor",Vector3.new(30,1,34),at(0,-0.5,0),tile,Enum.Material.Concrete)
-    make(room,"ShopRoof",Vector3.new(30,1,34),at(0,13.5,0),trim)
-    make(room,"LeftWall",Vector3.new(1,13,34),at(-15,6.5,0),wall)
-    make(room,"RightWall",Vector3.new(1,13,34),at(15,6.5,0),wall)
-    make(room,"BackWall",Vector3.new(30,13,1),at(0,6.5,17),wall)
-    -- Shopfront: central 6-stud opening, glass panes, no blocking invisible wall.
+    -- The original solid body prevents entry: replace its collision with fitted walls.
+    body.Transparency=1;body.CanCollide=false;body.CanTouch=false
+    entrance.Transparency=1;entrance.CanCollide=false;entrance.CanTouch=false
+    local wall=Color3.fromRGB(205,211,216)
+    local trim=Color3.fromRGB(39,51,59)
+    make(room,"LeftWall",Vector3.new(1,23,60),at(-32,11.5,0),wall)
+    make(room,"RightWall",Vector3.new(1,23,60),at(32,11.5,0),wall)
+    make(room,"RearWall",Vector3.new(65,23,1),at(0,11.5,29.5),wall)
+    -- Existing windows remain visible; center opening matches original EntranceDoor.
+    for _,x in ipairs({-28,28}) do
+        make(room,"FrontEdge",Vector3.new(9,23,0.6),at(x,11.5,-30),wall)
+    end
     for _,x in ipairs({-10,10}) do
-        make(room,"GlassFront",Vector3.new(10,10,0.4),at(x,5,-17),
-            Color3.fromRGB(135,207,222),Enum.Material.Glass,true,0.5)
+        make(room,"FrontPillar",Vector3.new(7,23,0.6),at(x,11.5,-30),wall)
     end
-    make(room,"DoorFrameLeft",Vector3.new(0.5,10,0.6),at(-3,5,-17),trim)
-    make(room,"DoorFrameRight",Vector3.new(0.5,10,0.6),at(3,5,-17),trim)
-    make(room,"DoorHeader",Vector3.new(6,3,0.6),at(0,11.5,-17),trim)
-    -- Open, non-colliding glass swing door: player walks through without pressing E.
-    make(room,"OpenGlassDoor",Vector3.new(3,9,0.25),
-        at(3.1,4.5,-14.8)*CFrame.Angles(0,math.rad(85),0),
-        Color3.fromRGB(155,225,235),Enum.Material.Glass,false,0.55)
-    textSign(room,"StoreSign","24/7 MARKET",at(0,12.5,-17.4),Vector3.new(16,2,0.3))
-    -- Register near the entrance on the right.
-    make(room,"Counter",Vector3.new(8,3.5,3),at(9,1.75,-9),Color3.fromRGB(70,78,85))
-    make(room,"CounterTop",Vector3.new(8.5,0.35,3.3),at(9,3.7,-9),trim)
-    make(room,"CashRegister",Vector3.new(2,1,1.6),at(9,4.4,-9),Color3.fromRGB(26,31,35))
-    local checkout=make(room,"CheckoutInteraction",Vector3.new(2,1,2),at(9,4.7,-10),
-        Color3.fromRGB(0,200,150),Enum.Material.Neon,false,1)
+    make(room,"EntranceHeader",Vector3.new(13,9,0.6),at(0,18.5,-30),wall)
+    make(room,"GlassDoorOpen",Vector3.new(5,12,0.25),
+        at(6,6,-27)*CFrame.Angles(0,math.rad(80),0),
+        Color3.fromRGB(150,215,235),Enum.Material.Glass,false,0.6)
+    -- Interior tile on top of existing foundation.
+    make(room,"TileFloor",Vector3.new(62,0.15,58),at(0,0.075,0),
+        Color3.fromRGB(101,111,118),Enum.Material.Slate)
+    -- Checkout near the front right; aisle from the front door stays clear.
+    make(room,"CheckoutCounter",Vector3.new(13,3.4,4),at(21,1.7,-20),trim)
+    make(room,"CheckoutTop",Vector3.new(13.5,0.3,4.5),at(21,3.55,-20),
+        Color3.fromRGB(126,135,139))
+    make(room,"CashRegister",Vector3.new(2.5,1.2,2),at(20,4.3,-20),
+        Color3.fromRGB(28,34,40))
+    local checkout=make(room,"CheckoutInteraction",Vector3.new(2,2,2),
+        at(20,4,-23),Color3.fromRGB(0,190,140),Enum.Material.Neon,false,1)
     local prompt=Instance.new("ProximityPrompt")
-    prompt.Name="OpenShop";prompt.ActionText="Kup produkty";prompt.ObjectText="Kasa sklepu "..index
-    prompt.MaxActivationDistance=10;prompt.HoldDuration=0.3
-    prompt.RequiresLineOfSight=false;prompt.Parent=checkout
-    -- Stock aisles: 2 shelves, wide central walkway.
-    for _,x in ipairs({-8,0}) do
-        for _,z in ipairs({-3,4}) do
-            for _,y in ipairs({2,4.5}) do
-                make(room,"DisplayShelf",Vector3.new(5,0.35,2),at(x,y,z),
-                    Color3.fromRGB(123,89,58),Enum.Material.Wood)
-                for k=1,4 do
-                    make(room,"PackagedProduct",Vector3.new(0.65,1.1,0.75),
-                        at(x-2.1+k*0.9,y+0.7,z),
-                        Color3.fromRGB(35+k*42,65+k*24,180-k*30))
+    prompt.Name="OpenShop";prompt.ActionText="Kup produkty"
+    prompt.ObjectText="Kasa sklepu "..index;prompt.MaxActivationDistance=9
+    prompt.HoldDuration=0.3;prompt.RequiresLineOfSight=false;prompt.Parent=checkout
+    -- Two aisles, product packages and refrigerators.
+    for _,x in ipairs({-13,5}) do
+        for _,z in ipairs({-8,3,14}) do
+            make(room,"ShelfBase",Vector3.new(10,0.5,3),at(x,0.7,z),
+                Color3.fromRGB(95,74,58),Enum.Material.Wood)
+            for _,y in ipairs({2.5,5}) do
+                make(room,"Shelf",Vector3.new(10,0.3,3),at(x,y,z),
+                    Color3.fromRGB(118,87,62),Enum.Material.Wood)
+                for k=1,7 do
+                    make(room,"Product",Vector3.new(0.8,1.4,1),
+                        at(x-4.6+k*1.15,y+0.85,z),
+                        Color3.fromRGB(35+k*25,60+k*17,190-k*17))
                 end
             end
         end
     end
-    -- Fridges along the left wall.
-    for _,z in ipairs({-11,-6,0}) do
-        make(room,"Fridge",Vector3.new(2.3,8,4),at(-12.8,4,z),
-            Color3.fromRGB(55,80,95),Enum.Material.Metal)
-        make(room,"FridgeGlass",Vector3.new(0.2,6.5,3.2),at(-11.55,4,z),
-            Color3.fromRGB(120,195,220),Enum.Material.Glass,false,0.4)
+    for _,z in ipairs({-20,-12,-4,4}) do
+        make(room,"Fridge",Vector3.new(3,9,6),at(-28,4.5,z),
+            Color3.fromRGB(49,72,87),Enum.Material.Metal)
+        make(room,"FridgeGlass",Vector3.new(0.2,7,5),at(-26.4,4.5,z),
+            Color3.fromRGB(145,211,231),Enum.Material.Glass,false,0.5)
     end
-    -- Stockroom at rear, with a walk-through door opening.
-    make(room,"StockPartitionLeft",Vector3.new(19,12,0.6),at(-5.5,6,9),wall)
-    make(room,"StockPartitionRight",Vector3.new(5,12,0.6),at(12.5,6,9),wall)
-    make(room,"StockPartitionHeader",Vector3.new(6,3,0.6),at(7,10.5,9),wall)
-    textSign(room,"StockroomSign","ZAPLECZE",at(7,11,8.6),Vector3.new(7,1.5,0.2))
-    for _,x in ipairs({-10,-3,4}) do
-        make(room,"StockShelf",Vector3.new(4,3,2),at(x,2,14),
-            Color3.fromRGB(105,87,67),Enum.Material.Wood)
-        make(room,"StockBox",Vector3.new(2,2,2),at(x,4.5,14),
-            Color3.fromRGB(165,122,70),Enum.Material.Wood)
+    -- Stockroom across the rear, with a physical opening at x=16.
+    make(room,"StockroomPartitionLeft",Vector3.new(44,15,0.6),
+        at(-10,7.5,20),wall)
+    make(room,"StockroomPartitionRight",Vector3.new(9,15,0.6),
+        at(27.5,7.5,20),wall)
+    make(room,"StockroomDoorHeader",Vector3.new(12,8,0.6),
+        at(17,19,20),wall)
+    textSign(room,"StockroomSign","ZAPLECZE",at(17,13,19.5),Vector3.new(10,2,0.2))
+    for _,x in ipairs({-23,-10,3}) do
+        make(room,"StorageRack",Vector3.new(8,4,3),at(x,2.2,25),
+            Color3.fromRGB(112,90,65),Enum.Material.Wood)
+        make(room,"StorageBoxes",Vector3.new(4,3,2),at(x,5.7,25),
+            Color3.fromRGB(167,126,75),Enum.Material.Wood)
     end
-    local safe=make(room,"StockroomCashSafe",Vector3.new(3,3,2),at(-12,1.5,13),
-        Color3.fromRGB(63,70,78),Enum.Material.Metal)
+    local safe=make(room,"FutureRobberySafe",Vector3.new(3,4,3),
+        at(26,2,25),Color3.fromRGB(68,76,83),Enum.Material.Metal)
     safe:SetAttribute("FutureShopRobbery",true)
-    -- Overhead lighting.
-    for _,z in ipairs({-9,0,12}) do
-        local fixture=make(room,"CeilingLight",Vector3.new(8,0.2,1),at(0,12.8,z),
-            Color3.fromRGB(245,245,235),Enum.Material.Neon,false)
-        local light=Instance.new("SurfaceLight")
-        light.Face=Enum.NormalId.Bottom;light.Brightness=2;light.Range=18
-        light.Angle=120;light.Parent=fixture
+    for _,z in ipairs({-19,-4,12,25}) do
+        local lamp=make(room,"CeilingLight",Vector3.new(12,0.3,2),
+            at(0,22.2,z),Color3.fromRGB(255,249,221),Enum.Material.Neon,false)
+        local light=Instance.new("SurfaceLight");light.Face=Enum.NormalId.Bottom
+        light.Brightness=2;light.Range=25;light.Parent=lamp
     end
-    print("[CityHeistShop] Shop_"..index.." walk-in interior ready")
+    print("[CityHeistShop] Shop_"..index.." fitted to original building; walk-in entrance ready")
     return checkout
 end
 return Builder
