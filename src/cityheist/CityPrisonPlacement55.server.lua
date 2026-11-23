@@ -1,4 +1,4 @@
--- City Heist step 55: preview-only prison placement.
+-- City Heist step 57: perimeter prison placement (Studio preview).
 -- Move the entire prison model without rebuilding guards, cells or scripts.
 local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
@@ -8,7 +8,7 @@ if not city then return end
 local roads=city:FindFirstChild("Roads")
 local prison=W:FindFirstChild("CityPrison")
 if not roads or not prison or not prison:IsA("Model") then
-    warn("[Prison55] Missing road network or CityPrison; no changes")
+    warn("[Prison57] Missing road network or CityPrison; no changes")
     return
 end
 -- Let the city-layout script finish moving other buildings.
@@ -78,21 +78,24 @@ for _,folderName in ipairs({"GameplayLocations","Downtown","CityLocations","City
         end
     end
 end
+-- Step 57: locate the prison on the outer grassy perimeter, not in city blocks.
+-- Choose one of the four outer edges, favoring the side nearest its old location.
 local centerX=(minX+maxX)/2
 local centerZ=(minZ+maxZ)/2
 local candidates={}
-local step=45
-for x=minX+35,maxX-35,step do
-    for z=minZ+35,maxZ-35,step do
-        local nx=(x-centerX)/math.max(1,(maxX-minX)/2)
-        local nz=(z-centerZ)/math.max(1,(maxZ-minZ)/2)
-        local radial=math.sqrt(nx*nx+nz*nz)
-        -- Prefer edge districts but not the literal edge of the world.
-        local score=math.abs(radial-0.70)*500
-        -- Prefer the prison's original side of the city where possible.
-        score+=Vector2.new(x-original.Position.X,z-original.Position.Z).Magnitude*0.08
-        table.insert(candidates,{x=x,z=z,score=score})
-    end
+local margin=24
+local stride=40
+local function add(x,z,side)
+    local distance=Vector2.new(x-original.Position.X,z-original.Position.Z).Magnitude
+    table.insert(candidates,{x=x,z=z,side=side,score=distance})
+end
+for x=minX+size.X/2,maxX-size.X/2,stride do
+    add(x,minZ-size.Z/2-margin,"north")
+    add(x,maxZ+size.Z/2+margin,"south")
+end
+for z=minZ+size.Z/2,maxZ-size.Z/2,stride do
+    add(minX-size.X/2-margin,z,"west")
+    add(maxX+size.X/2+margin,z,"east")
 end
 table.sort(candidates,function(a,b)return a.score<b.score end)
 local chosen=nil
@@ -100,38 +103,47 @@ for _,candidate in ipairs(candidates) do
     local pivot=CFrame.new(candidate.x,original.Position.Y,candidate.z)*original.Rotation
     local bounds=pivot*offset
     local valid=true
-    -- The whole prison must be inside the mapped road network's perimeter.
-    for _,p in ipairs(rectangle(bounds,size,20)) do
-        if p.X<minX+35 or p.X>maxX-35 or p.Z<minZ+35 or p.Z>maxZ-35 then
-            valid=false;break
-        end
+    -- Keep the entire complex on the outside of the road grid.
+    local corners=rectangle(bounds,size,10)
+    if candidate.side=="north" then
+        for _,p in ipairs(corners) do if p.Z>minZ-8 then valid=false end end
+    elseif candidate.side=="south" then
+        for _,p in ipairs(corners) do if p.Z<maxZ+8 then valid=false end end
+    elseif candidate.side=="west" then
+        for _,p in ipairs(corners) do if p.X>minX-8 then valid=false end end
+    else
+        for _,p in ipairs(corners) do if p.X<maxX+8 then valid=false end end
     end
     if valid then
         for _,road in ipairs(roadParts) do
-            if collides(bounds,size,road.CFrame,road.Size,5) then valid=false;break end
+            if collides(bounds,size,road.CFrame,road.Size,8) then valid=false;break end
         end
     end
     if valid then
         for _,other in ipairs(obstacleModels) do
-            if collides(bounds,size,other.cf,other.size,10) then valid=false;break end
+            if collides(bounds,size,other.cf,other.size,12) then valid=false;break end
         end
     end
     if valid then
-        -- Avoid isolated fields: require a road near the perimeter.
+        -- A perimeter road should still be reasonably close for future access.
         local nearest=math.huge
         for _,road in ipairs(roadParts) do
-            local dx=bounds.Position.X-road.Position.X
-            local dz=bounds.Position.Z-road.Position.Z
-            local d=math.sqrt(dx*dx+dz*dz)-math.max(size.X,size.Z)/2-math.max(road.Size.X,road.Size.Z)/2
-            nearest=math.min(nearest,d)
+            local localPos=road.CFrame:PointToObjectSpace(bounds.Position)
+            local dx=math.max(0,math.abs(localPos.X)-road.Size.X/2)
+            local dz=math.max(0,math.abs(localPos.Z)-road.Size.Z/2)
+            nearest=math.min(nearest,math.sqrt(dx*dx+dz*dz))
         end
-        if nearest<90 then chosen=pivot;break end
+        if nearest<math.max(size.X,size.Z)/2+105 then
+            chosen=pivot
+            print("[Prison57] Selected outside-city grassy edge:",candidate.side)
+            break
+        end
     end
 end
 if chosen then
     prison:PivotTo(chosen)
     prison:SetAttribute("CityPrison55Moved",true)
-    print(string.format("[Prison55] Relocated entire prison to X %.0f Z %.0f; roads and buildings clear",chosen.Position.X,chosen.Position.Z))
+    print(string.format("[Prison57] Relocated entire prison to X %.0f Z %.0f; roads and buildings clear",chosen.Position.X,chosen.Position.Z))
 else
-    warn("[Prison55] No safe parcel for complete prison. Original position preserved; no forced overlap.")
+    warn("[Prison57] No safe parcel for complete prison. Original position preserved; no forced overlap.")
 end
