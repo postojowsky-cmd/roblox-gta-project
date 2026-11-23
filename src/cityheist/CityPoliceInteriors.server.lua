@@ -159,6 +159,93 @@ local function build(model,index)
         light.Face=Enum.NormalId.Bottom;light.Range=25;light.Brightness=2
         light.Parent=lightPart
     end
+    -- Detail pass: police reception and offices, using proportions of the
+    -- original building. These are small static fixtures, not imported scripts.
+    local navy=Color3.fromRGB(26,46,65)
+    local gold=Color3.fromRGB(223,182,89)
+    local paper=Color3.fromRGB(225,230,229)
+    local glass=Color3.fromRGB(125,190,210)
+    -- Main counter front panel, service information and waiting-room boards.
+    part(interior,"ReceptionFrontPanel",Vector3.new(math.min(11,width*.28),2.5,.22),
+        at(deskX,1.65,-hd+8.95),navy,Enum.Material.Metal,false)
+    sign(interior,"ReceptionInfo","DYZURNY 24/7",
+        at(deskX,8.8,-hd+9),math.min(12,width*.30))
+    part(interior,"ReceptionLamp",Vector3.new(1.4,.4,1.4),
+        at(deskX-2.1,5,-hd+10),Color3.fromRGB(240,238,195),
+        Enum.Material.Neon,false)
+    -- Backlit visitor information board, clear of the front door.
+    local boardX=math.max(5.5,hw-1.15)
+    local board=part(interior,"NoticeBoard",Vector3.new(.2,7,10),
+        at(boardX,8,-hd+13),navy,Enum.Material.Metal,false)
+    local sheet=part(interior,"NoticeSheet",Vector3.new(.24,5.4,8.3),
+        at(boardX-.2,8,-hd+13),paper,nil,false)
+    local boardGui=Instance.new("SurfaceGui")
+    boardGui.Face=Enum.NormalId.Left
+    boardGui.Parent=sheet
+    local boardLabel=Instance.new("TextLabel")
+    boardLabel.Size=UDim2.fromScale(1,1)
+    boardLabel.BackgroundTransparency=1
+    boardLabel.Text="KOMISARIAT\\nRECEPCJA / ZGLOSZENIA\\nPOKOJE SLUZBOWE"
+    boardLabel.TextScaled=true
+    boardLabel.TextColor3=navy
+    boardLabel.Font=Enum.Font.GothamBold
+    boardLabel.Parent=boardGui
+    -- Benches with frames and legs, rather than isolated simple blocks.
+    for i=1,2 do
+        local z=-hd+8+i*5
+        part(interior,"WaitingBenchFrame",Vector3.new(5.5,.4,2.7),
+            at(chairX,1.1,z),metal,Enum.Material.Metal)
+        part(interior,"WaitingBenchCushion",Vector3.new(5.1,.45,2.3),
+            at(chairX,1.5,z),Color3.fromRGB(72,104,127))
+    end
+    -- Dispatch workstation and a small printer.
+    local computerX=-hw+8
+    part(interior,"OfficeKeyboard",Vector3.new(2.3,.16,.9),
+        at(computerX,3.52,backZ-1.2),
+        Color3.fromRGB(38,44,50),Enum.Material.Metal,false)
+    part(interior,"OfficeMouse",Vector3.new(.5,.2,.8),
+        at(computerX+2.3,3.52,backZ-1.2),
+        Color3.fromRGB(38,44,50),Enum.Material.Metal,false)
+    part(interior,"FilePrinter",Vector3.new(3,1.8,2.5),
+        at(-hw+6,4.2,backZ+5),metal,Enum.Material.Metal)
+    part(interior,"PrinterPaper",Vector3.new(2,.06,1.5),
+        at(-hw+6,5.15,backZ+5),paper,nil,false)
+    -- Evidence shelf and colored folders on the rear wall.
+    local evidenceZ=math.min(hd-2,backZ+6)
+    part(interior,"EvidenceRack",Vector3.new(8,.5,2.5),
+        at(hw-9,6,evidenceZ),metal,Enum.Material.Metal)
+    for i=1,6 do
+        part(interior,"CaseBinder",Vector3.new(.6,1.9,1.5),
+            at(hw-12.4+i,7.2,evidenceZ),
+            (i%2==0) and Color3.fromRGB(48,84,121) or Color3.fromRGB(153,74,65))
+    end
+    -- Cell fronts have bars and a walk-through gap. No invisible collision door.
+    for i=1,2 do
+        local x=(i==1 and -1 or 1)*math.min(hw-7,cellWidth+2)
+        local faceZ=hd-8.5
+        local leftLimit=x-cellWidth/2
+        local rightLimit=x+cellWidth/2
+        for bx=leftLimit+0.55,rightLimit-0.3,1.05 do
+            if math.abs(bx-x)>2.15 then
+                part(interior,"CellFrontBar",Vector3.new(.2,9,.2),
+                    at(bx,5,faceZ),Color3.fromRGB(93,108,120),
+                    Enum.Material.Metal)
+            end
+        end
+        part(interior,"CellFrontRailTop",Vector3.new(cellWidth,.25,.25),
+            at(x,9.8,faceZ),metal,Enum.Material.Metal)
+    end
+    -- Blue station accents along walls and emergency lighting.
+    for _,z in ipairs({-hd+5,hd-5}) do
+        part(interior,"PoliceWallAccent",Vector3.new(width-.7,.6,.14),
+            at(0,9,z),navy,Enum.Material.Metal,false)
+    end
+    for _,z in ipairs({-hd+7,hd-7}) do
+        local fixture=part(interior,"SafetyLamp",Vector3.new(2.5,.4,.6),
+            at(-hw+2,10,z),gold,Enum.Material.Neon,false)
+        local glow=Instance.new("PointLight")
+        glow.Range=12;glow.Brightness=.65;glow.Parent=fixture
+    end
     print("[PoliceInterior] Police_"..index..
         " entrance, reception, office and cells generated inside original building")
 end
