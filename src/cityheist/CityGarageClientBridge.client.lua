@@ -6,21 +6,6 @@ local player = Players.LocalPlayer
 local event = ReplicatedStorage:WaitForChild("CityHeistGarageSpawnRequest")
 local TARGET = "Saab 9-3 Turbo X"
 local wired = setmetatable({}, {__mode = "k"})
-local busy = false
-local spawned = workspace:WaitForChild("CityHeistGarageSpawned")
-local vehicleId = "Vehicle_" .. player.UserId
-local function hasVehicle()
-    return spawned:FindFirstChild(vehicleId) ~= nil
-end
-local function refreshButtons()
-    for button in pairs(wired) do
-        if button.Parent then
-            button.Active = not busy
-            button.AutoButtonColor = not busy
-            button.Text = busy and "PROSZE CZEKAC..." or (hasVehicle() and "SCHOWAJ POJAZD" or "WYCIAGNIJ POJAZD")
-        end
-    end
-end
 
 local function connectButton(obj)
     if not obj:IsA("TextButton") or wired[obj] then return end
@@ -36,16 +21,17 @@ local function connectButton(obj)
     end
     if not matches then return end
     wired[obj] = true
-    refreshButtons()
+    obj.Text = "WYCIAGNIJ POJAZD"
+    obj.Active = true
+    obj.AutoButtonColor = true
     obj.MouseButton1Click:Connect(function()
-        if busy then return end
-        busy = true
-        refreshButtons()
+        obj.Active = false
+        obj.Text = "WYCIAGANIE..."
         event:FireServer(TARGET)
         task.delay(4, function()
-            if busy then
-                busy = false
-                refreshButtons()
+            if obj.Parent then
+                obj.Active = true
+                obj.Text = "WYCIAGNIJ POJAZD"
             end
         end)
     end)
@@ -68,15 +54,11 @@ gui.DescendantAdded:Connect(function(obj)
         end
     end)
 end)
-spawned.ChildAdded:Connect(function() task.defer(refreshButtons) end)
-spawned.ChildRemoved:Connect(function() task.defer(refreshButtons) end)
-event.OnClientEvent:Connect(function(ok, message, isSpawned)
-    busy = false
-    refreshButtons()
+event.OnClientEvent:Connect(function(ok, message)
     if ok then
         print("[CityGarage] " .. tostring(message))
     else
         warn("[CityGarage] " .. tostring(message))
     end
 end)
-print("[CityGarage] Przyciski WYCIAGNIJ/SCHOWAJ podlaczone")
+print("[CityGarage] Przycisk Saaba podlaczony")
