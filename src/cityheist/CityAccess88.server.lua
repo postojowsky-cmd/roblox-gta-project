@@ -4,16 +4,16 @@
 local RS=game:GetService("RunService")
 if not RS:IsStudio() then return end
 local W=game:GetService("Workspace")
-if W:GetAttribute("CityAccess88Running") then return end
-W:SetAttribute("CityAccess88Running",true)
-print("[CityAccess88] START")
+if W:GetAttribute("CityAccess89Running") then return end
+W:SetAttribute("CityAccess89Running",true)
+print("[CityAccess89] START")
 
 local city=W:WaitForChild("CityBlockout",30)
 local roads=city and city:WaitForChild("Roads",30)
 local ground=city and city:WaitForChild("Ground",30)
 local infrastructure=W:WaitForChild("CityHeistInfrastructure86",100)
 if not (city and roads and ground and infrastructure) then
-    warn("[CityAccess88] No roads, ground or infrastructure; skipped")
+    warn("[CityAccess89] No roads, ground or infrastructure; skipped")
     return
 end
 -- Infrastructure's folder is created before all three models are placed.
@@ -35,7 +35,7 @@ for _,m in ipairs(infrastructure:GetChildren()) do
 end
 table.sort(sites,function(a,b)return a.Name<b.Name end)
 if #sites==0 then
-    warn("[CityAccess88] No infrastructure models available; skipped")
+    warn("[CityAccess89] No infrastructure models available; skipped")
     return
 end
 
@@ -166,30 +166,54 @@ for _,site in ipairs(sites) do
                 local ym=yAt(mid.X,mid.Z)
                 if ya and yb and ym
                     and math.abs(ya-ym)<1.4 and math.abs(yb-ym)<1.4 then
-                    local pos=Vector3.new(mid.X,ym+.19,mid.Z)
+                    -- Bridge now reaches into the original pad and the roadway
+                    -- (the old corridor stopped 1.2 studs short at both ends).
+                    -- Width is adaptive so a wider entrance never destroys a
+                    -- previously passable route when there are obstacles.
+                    local targetTop=pad.Position.Y+pad.Size.Y/2
+                    local top=(ym+.30+targetTop)/2
+                    local pos=Vector3.new(mid.X,top-.12,mid.Z)
                     local cf=CFrame.lookAt(pos,pos+direction)
-                    local size=Vector3.new(9,.22,span)
-                    local conflicts=W:GetPartBoundsInBox(
-                        cf+Vector3.new(0,1.5,0),
-                        Vector3.new(12,3.2,span+.5),checks)
-                    if #conflicts==0 then
-                        createPart(folder,"Driveway_"..site.Name,size,cf,
-                            Color3.fromRGB(75,80,84),Enum.Material.Asphalt)
+                    local drivewayLength=span+2.8
+                    local chosenWidth=nil
+                    for _,width in ipairs({15,12,9}) do
+                        local conflicts=W:GetPartBoundsInBox(
+                            cf+Vector3.new(0,1.5,0),
+                            Vector3.new(width+1,3.1,span+.3),checks)
+                        if #conflicts==0 then chosenWidth=width;break end
+                    end
+                    if chosenWidth then
+                        createPart(folder,"Driveway_"..site.Name,
+                            Vector3.new(chosenWidth,.24,drivewayLength),cf,
+                            Color3.fromRGB(61,65,69),Enum.Material.Asphalt)
+                        -- Subtle edge lines make the entrance look deliberate.
+                        -- Purely visual; no raised kerb for Saab wheels.
+                        for _,side in ipairs({-1,1}) do
+                            local offset=cf.RightVector*(side*(chosenWidth/2-.38))
+                            local marker=createPart(folder,"DrivewayEdge_"..site.Name,
+                                Vector3.new(.24,.025,math.max(1,span-1)),
+                                cf+offset+Vector3.new(0,.14,0),
+                                Color3.fromRGB(218,221,219),
+                                Enum.Material.SmoothPlastic,false)
+                            marker.CanQuery=false
+                        end
                         linked+=1
-                        print(string.format("[CityAccess88] CONNECTED %s | %.1f studs",site.Name,span))
+                        print(string.format(
+                            "[CityAccess89] CONNECTED %s | %.1f studs, width %.0f, seamless pad overlap",
+                            site.Name,drivewayLength,chosenWidth))
                     else
-                        print("[CityAccess88] SKIPPED driveway "..site.Name.." | blocked corridor")
+                        print("[CityAccess89] SKIPPED driveway "..site.Name.." | blocked corridor")
                     end
                 else
-                    print("[CityAccess88] SKIPPED driveway "..site.Name.." | uneven ground")
+                    print("[CityAccess89] SKIPPED driveway "..site.Name.." | uneven ground")
                 end
             else
-                print("[CityAccess88] SKIPPED driveway "..site.Name.." | no usable road gap")
+                print("[CityAccess89] SKIPPED driveway "..site.Name.." | no usable road gap")
             end
         else
-            print("[CityAccess88] SKIPPED driveway "..site.Name.." | road too distant")
+            print("[CityAccess89] SKIPPED driveway "..site.Name.." | road too distant")
         end
     end
 end
-print(string.format("[CityAccess88] DONE: %d markers, %d safe driveway links; existing roads unchanged",
+print(string.format("[CityAccess89] DONE: %d markers, %d refined driveway links; existing roads unchanged",
     #sites,linked))
