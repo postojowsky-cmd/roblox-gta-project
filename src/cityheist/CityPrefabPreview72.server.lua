@@ -5,8 +5,8 @@ local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-if W:GetAttribute("CityPrefab75Running") then return end
-W:SetAttribute("CityPrefab75Running",true)
+if W:GetAttribute("CityPrefab76Running") then return end
+W:SetAttribute("CityPrefab76Running",true)
 
 local city=W:WaitForChild("CityBlockout",30)
 local stage=SS:WaitForChild("CityHeistAssetStaging",45)
@@ -60,9 +60,21 @@ local function register(m)
        size.X>105 or size.Z>105 or size.Y>150 then return end
     table.insert(candidates,{model=m,count=count,size=size})
 end
-for _,obj in ipairs(prefabs:GetChildren()) do register(obj) end
+-- Include nested prefab Models, not only the root-level group "Model"/"A".
+-- Prefer individual building models; avoid nesting one prefab inside another.
+for _,obj in ipairs(prefabs:GetDescendants()) do
+    if obj:IsA("Model") then
+        local nestedModels=0
+        for _,child in ipairs(obj:GetDescendants()) do
+            if child:IsA("Model") then nestedModels+=1 end
+            if nestedModels>6 then break end
+        end
+        if nestedModels<=6 then register(obj) end
+    end
+end
+-- Fallback to grouped models only when the asset does not expose units.
 if #candidates==0 then
-    for _,obj in ipairs(prefabs:GetDescendants()) do register(obj) end
+    for _,obj in ipairs(prefabs:GetChildren()) do register(obj) end
 end
 table.sort(candidates,function(a,b)
     if a.count==b.count then return a.model.Name<b.model.Name end
@@ -130,8 +142,8 @@ local centerX=(minX+maxX)/2
 local centerZ=(minZ+maxZ)/2
 -- Search only the city's own road-grid extent. A broad grid gives genuine
 -- vacant lots, unlike the previous floating satellite district.
-for x=minX+55,maxX-55,52 do
-    for z=minZ+55,maxZ-55,52 do
+for x=minX+40,maxX-40,28 do
+    for z=minZ+40,maxZ-40,28 do
         local dx=(x-centerX)/(maxX-minX)
         local dz=(z-centerZ)/(maxZ-minZ)
         local distance=math.sqrt(dx*dx+dz*dz)
@@ -148,45 +160,60 @@ table.sort(plots,function(a,b)
 end)
 
 local built=0
+local skippedTerrain=0
+local usedNames={}
+local limitScans=math.min(30,#candidates)
+-- Find a suitable building FOR EACH PLOT, not a plot for one oversized
+-- candidate repeatedly. Include several smaller prefabs where space is tight.
 for _,plot in ipairs(plots) do
     if built>=MAX_BUILDINGS then break end
-    local entry=candidates[(built%#candidates)+1]
-    local size=entry.size
-    -- Bounding boxes, not the parcel center, determine safety.
     local y=surface(plot.x,plot.z)
     if y then
-        local flat=true
-        for _,dx in ipairs({-size.X/2-3,size.X/2+3}) do
-            for _,dz in ipairs({-size.Z/2-3,size.Z/2+3}) do
-                local y2=surface(plot.x+dx,plot.z+dz)
-                if not y2 or math.abs(y2-y)>1.5 then flat=false end
+        local found=nil
+        local pickedSize=nil
+        for index=1,limitScans do
+            local candidateIndex=(built+index-1)%limitScans+1
+            local entry=candidates[candidateIndex]
+            local size=entry.size
+            local level=true
+            for _,dx in ipairs({-size.X/2-4,size.X/2+4}) do
+                for _,dz in ipairs({-size.Z/2-4,size.Z/2+4}) do
+                    local y2=surface(plot.x+dx,plot.z+dz)
+                    if not y2 or math.abs(y2-y)>2 then level=false end
+                end
+            end
+            if level and free(plot.x,y,plot.z,size.X,size.Z) then
+                found=entry
+                pickedSize=size
+                break
             end
         end
-        if flat and free(plot.x,y,plot.z,size.X,size.Z) then
-            local copy=entry.model:Clone()
+        if found then
+            local copy=found.model:Clone()
             for _,child in ipairs(copy:GetDescendants()) do
                 if child:IsA("LuaSourceContainer") then child:Destroy() end
                 if child:IsA("BasePart") then child.Anchored=true end
             end
-            copy.Name=string.format("CityPrefab_%02d_%s",built+1,entry.model.Name)
+            copy.Name=string.format("CityPrefab_%02d_%s",built+1,found.model.Name)
             copy.Parent=target
-            local ok,bounds,realSize=pcall(function()
-                return copy:GetBoundingBox()
-            end)
+            local ok,bounds,realSize=pcall(function()return copy:GetBoundingBox()end)
             if ok and realSize then
                 local pivot=copy:GetPivot()
                 local offset=pivot.Position.Y-(bounds.Position.Y-realSize.Y/2)
                 copy:PivotTo(CFrame.new(plot.x,y+offset,plot.z)*pivot.Rotation)
                 built+=1
+                usedNames[found.model.Name]=true
                 print(string.format(
-                    "[CityPrefab74] PLACED %02d %s on existing map (X %.0f Z %.0f)",
-                    built,entry.model.Name,plot.x,plot.z))
+                    "[CityPrefab76] PLACED %02d %s at X %.0f Z %.0f | %.0fx%.0f",
+                    built,found.model.Name,plot.x,plot.z,pickedSize.X,pickedSize.Z))
             else
                 copy:Destroy()
             end
         end
+    else
+        skippedTerrain+=1
     end
 end
 print(string.format(
-    "[CityPrefab74] %d genuine prefab buildings placed within original city; no duplicate roads or distant preview; original buildings unchanged",
-    built))
+    "[CityPrefab76] DONE: %d buildings, %d prefab candidates, %d terrain-missing plots; roads and gameplay buildings unchanged",
+    built,#candidates,skippedTerrain))
