@@ -5,7 +5,7 @@ local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-if W:GetAttribute("CityPrefab76Running") then return end
+if W:GetAttribute("CityPrefab77Running") then return end
 W:SetAttribute("CityPrefab76Running",true)
 
 local city=W:WaitForChild("CityBlockout",30)
@@ -198,13 +198,21 @@ for _,plot in ipairs(plots) do
             copy.Parent=target
             local ok,bounds,realSize=pcall(function()return copy:GetBoundingBox()end)
             if ok and realSize then
+                -- Source prefab pivots can include pitch/roll, causing entire
+                -- towers to lean. Retain only their heading around world Y.
                 local pivot=copy:GetPivot()
-                local offset=pivot.Position.Y-(bounds.Position.Y-realSize.Y/2)
-                copy:PivotTo(CFrame.new(plot.x,y+offset,plot.z)*pivot.Rotation)
+                local _,yaw,_=pivot:ToOrientation()
+                local upright=CFrame.new(plot.x,y,plot.z)*CFrame.Angles(0,yaw,0)
+                copy:PivotTo(upright)
+                -- Re-evaluate the TRUE world bounding box after rotation;
+                -- anchor its lowest point to the original ground surface.
+                local correctedBox,correctedSize=copy:GetBoundingBox()
+                local bottom=correctedBox.Position.Y-correctedSize.Y/2
+                copy:PivotTo(copy:GetPivot()+Vector3.new(0,y-bottom+0.1,0))
                 built+=1
                 usedNames[found.model.Name]=true
                 print(string.format(
-                    "[CityPrefab76] PLACED %02d %s at X %.0f Z %.0f | %.0fx%.0f",
+                    "[CityPrefab77] PLACED %02d %s at X %.0f Z %.0f | %.0fx%.0f",
                     built,found.model.Name,plot.x,plot.z,pickedSize.X,pickedSize.Z))
             else
                 copy:Destroy()
@@ -215,5 +223,5 @@ for _,plot in ipairs(plots) do
     end
 end
 print(string.format(
-    "[CityPrefab76] DONE: %d buildings, %d prefab candidates, %d terrain-missing plots; roads and gameplay buildings unchanged",
+    "[CityPrefab77] DONE: %d buildings, %d prefab candidates, %d terrain-missing plots; roads and gameplay buildings unchanged",
     built,#candidates,skippedTerrain))
