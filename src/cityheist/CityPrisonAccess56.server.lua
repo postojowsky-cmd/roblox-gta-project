@@ -1,234 +1,210 @@
--- CITY HEIST: step 65 - EXTEND THE EXISTING PRISON DRIVEWAY TO CITY ROADS.
--- There is deliberately NO parking generation in this script.
--- Preview only in Roblox Studio; keeps CityPrison, garages, shops and banks intact.
-local RunService = game:GetService("RunService")
+-- City Heist / Step 66: visible prison access connection to the city grid.
+-- No parking, no walls or buildings are modified. Studio Play preview only.
+local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
+local W=game:GetService("Workspace")
+local city=W:WaitForChild("CityBlockout",20)
+local prison=W:WaitForChild("CityPrison",20)
+local roads=city and city:FindFirstChild("Roads")
+if not (city and prison and roads) then warn("[Prison66] Missing required model");return end
+if W:GetAttribute("CityPrisonRoad66Started") then return end
+W:SetAttribute("CityPrisonRoad66Started",true)
 
-local W = game:GetService("Workspace")
-local city = W:WaitForChild("CityBlockout", 25)
-local prison = W:WaitForChild("CityPrison", 25)
-local roads = city and city:FindFirstChild("Roads")
-if not (city and prison and roads) then
-    warn("[Prison65] Missing prison or Roads")
-    return
-end
-if W:GetAttribute("PrisonDrive65Running") then return end
-W:SetAttribute("PrisonDrive65Running", true)
-
--- Layout system relocates the prison after 4 seconds.
-local waited = 0
-while not prison:GetAttribute("CityPrison55Moved") and waited < 18 do
-    task.wait(0.25)
-    waited += 0.25
+local waited=0
+while not prison:GetAttribute("CityPrison55Moved") and waited<16 do
+    task.wait(0.25);waited+=0.25
 end
 if not prison:GetAttribute("CityPrison55Moved") then
-    warn("[Prison65] Prison relocation not finished: refusing to build misplaced road")
+    warn("[Prison66] Prison placement not confirmed; no road generated")
     return
 end
-task.wait(0.3)
+task.wait(0.25)
 
-for _,name in ipairs({"CityPrisonGenerated","CityPrisonAccess56"}) do
+for _,name in ipairs({"CityPrisonAccessRoad","CityPrisonGenerated","CityPrisonAccess56"}) do
     local old=W:FindFirstChild(name)
     if old then old:Destroy() end
 end
-local folder=Instance.new("Folder")
-folder.Name="CityPrisonAccessRoad"
-folder.Parent=W
-local oldRoad=W:FindFirstChild("CityPrisonAccessRoad")
--- Folder is intentionally named for easy identification in Explorer.
 
-local function flat(v)
-    return Vector3.new(v.X,0,v.Z)
-end
 local left=prison:FindFirstChild("GatePillarL",true)
 local right=prison:FindFirstChild("GatePillarR",true)
-if not (left and left:IsA("BasePart") and right and right:IsA("BasePart")) then
-    warn("[Prison65] Gate pillars not found")
-    folder:Destroy()
+if not (left and right and left:IsA("BasePart") and right:IsA("BasePart")) then
+    warn("[Prison66] Missing gate pillars")
     return
 end
+local function flat(v) return Vector3.new(v.X,0,v.Z) end
 local gate=(left.Position+right.Position)/2
-local span=flat(right.Position-left.Position)
-if span.Magnitude<1 then folder:Destroy();return end
-local across=span.Unit
+local axis=flat(right.Position-left.Position)
+if axis.Magnitude<1 then return end
+axis=axis.Unit
+local outward=Vector3.new(-axis.Z,0,axis.X)
 
 local roadParts={}
 for _,p in ipairs(roads:GetDescendants()) do
-    if p:IsA("BasePart") and p.Size.X>5 and p.Size.Z>5 then
-        table.insert(roadParts,p)
-    end
+    if p:IsA("BasePart") and p.Size.X>5 and p.Size.Z>5 then table.insert(roadParts,p) end
 end
-if #roadParts==0 then folder:Destroy();return end
-
-local function closestPointOnRoad(road,world)
-    local loc=road.CFrame:PointToObjectSpace(world)
-    return road.CFrame:PointToWorldSpace(Vector3.new(
-        math.clamp(loc.X,-road.Size.X/2,road.Size.X/2),
-        road.Size.Y/2,
-        math.clamp(loc.Z,-road.Size.Z/2,road.Size.Z/2)))
+if #roadParts==0 then warn("[Prison66] Roads folder contains no road parts");return end
+local function roadPoint(p,world)
+    local q=p.CFrame:PointToObjectSpace(world)
+    return p.CFrame:PointToWorldSpace(Vector3.new(
+        math.clamp(q.X,-p.Size.X/2,p.Size.X/2),
+        p.Size.Y/2,
+        math.clamp(q.Z,-p.Size.Z/2,p.Size.Z/2)
+    ))
 end
--- Determine which side of the gate faces the city, using actual road network.
-local closestGateRoad=nil
-local closestDistance=math.huge
+local cityPoint=nil
+local cityDist=math.huge
 for _,road in ipairs(roadParts) do
-    local p=closestPointOnRoad(road,gate)
-    local d=flat(p-gate).Magnitude
-    if d<closestDistance then
-        closestDistance=d
-        closestGateRoad=p
-    end
+    local q=roadPoint(road,gate)
+    local d=flat(q-gate).Magnitude
+    if d<cityDist then cityDist=d;cityPoint=q end
 end
-local outward=Vector3.new(-across.Z,0,across.X)
-if outward:Dot(flat(closestGateRoad-gate))<0 then outward=-outward end
+if not cityPoint then return end
+if outward:Dot(flat(cityPoint-gate))<0 then outward=-outward end
 
--- Find the END of the existing prison entry-road, so the new road starts
--- exactly where the old one ends instead of building on the courtyard.
-local startDistance=12
-local sourceRoad=nil
+-- Preserve existing prison driveway and begin at its visible end.
+local nearestEnd=gate+outward*25
+local bestForward=25
+local bestSource="gate offset"
 for _,p in ipairs(prison:GetDescendants()) do
     if p:IsA("BasePart") then
         local n=p.Name:lower()
-        if n:find("road",1,true) or n:find("drive",1,true)
-           or n:find("access",1,true) then
-            local dx,dz=p.Size.X,p.Size.Z
-            if math.max(dx,dz)>14 and math.min(dx,dz)>3 then
-                local dir=p.CFrame.RightVector
-                if dz>=dx then dir=p.CFrame.LookVector end
-                local half=math.max(dx,dz)/2
-                for _,sign in ipairs({-1,1}) do
-                    local edge=p.Position+flat(dir)*half*sign
-                    local forward=flat(edge-gate):Dot(outward)
-                    local lateral=math.abs(flat(edge-gate):Dot(across))
-                    if forward>startDistance and forward<450 and lateral<27 then
-                        startDistance=forward
-                        sourceRoad=p
+        if (n:find("road",1,true) or n:find("drive",1,true)
+            or n:find("access",1,true)) and p.Size.X>3 and p.Size.Z>3 then
+            local forward=flat(p.Position-gate):Dot(outward)
+            local side=math.abs(flat(p.Position-gate):Dot(axis))
+            if forward>=0 and forward<350 and side<35 then
+                for _,corner in ipairs({
+                    Vector3.new(-p.Size.X/2,0,-p.Size.Z/2),
+                    Vector3.new(-p.Size.X/2,0,p.Size.Z/2),
+                    Vector3.new(p.Size.X/2,0,-p.Size.Z/2),
+                    Vector3.new(p.Size.X/2,0,p.Size.Z/2)
+                }) do
+                    local point=p.CFrame:PointToWorldSpace(corner)
+                    local distance=flat(point-gate):Dot(outward)
+                    local lateral=math.abs(flat(point-gate):Dot(axis))
+                    if distance>bestForward and distance<450 and lateral<40 then
+                        bestForward=distance
+                        nearestEnd=point
+                        bestSource=p.Name
                     end
                 end
             end
         end
     end
 end
-local start=gate+outward*math.max(10,startDistance-2)
+local startXZ=gate+outward*(bestForward-2)
 
--- Candidate city connections: keep the prison drive STRAIGHT first; turn only
--- at an orthogonal junction when the existing city road is off-axis.
+-- Choose the actual closest segment of city street near the prison's
+-- driveway, not a generic location 200+ studs away.
 local candidates={}
-for _,road in ipairs(roadParts) do
-    for _,distance in ipairs({startDistance+25,startDistance+60,startDistance+120,startDistance+200,startDistance+320,startDistance+450}) do
-        local probe=gate+outward*distance
-        local point=closestPointOnRoad(road,probe)
-        local d=flat(point-gate)
-        local longitudinal=d:Dot(outward)
-        local lateral=d:Dot(across)
-        if longitudinal>startDistance+8 and longitudinal<850
-            and math.abs(lateral)<450 then
-            local score=longitudinal*0.22+math.abs(lateral)*1.0
-            table.insert(candidates,{
-                point=point,forward=longitudinal,side=lateral,
-                score=score,road=road
-            })
-        end
+for _,p in ipairs(roadParts) do
+    local q=roadPoint(p,startXZ)
+    local v=flat(q-startXZ)
+    local forward=v:Dot(outward)
+    local across=v:Dot(axis)
+    local distance=v.Magnitude
+    if distance>=3 and distance<900 then
+        -- Prefer a perpendicular city connection (the rightward leg in the sketch).
+        local score=distance + math.abs(forward)*0.45
+        table.insert(candidates,{point=q,road=p,forward=forward,across=across,score=score})
     end
 end
-table.sort(candidates,function(a,b) return a.score<b.score end)
+table.sort(candidates,function(a,b)return a.score<b.score end)
+if #candidates==0 then warn("[Prison66] No suitable road segment found");return end
 
--- Check unrelated building walls, but not pavement, for both route segments.
-local obstacles={}
+local objects={}
 for _,folderName in ipairs({"GameplayLocations","Downtown","CityLocations","CityGarages"}) do
-    local group=city:FindFirstChild(folderName)
-    if group then
-        for _,obj in ipairs(group:GetChildren()) do
-            if obj:IsA("Model") then table.insert(obstacles,obj) end
-        end
+    local f=city:FindFirstChild(folderName)
+    if f then
+        for _,m in ipairs(f:GetChildren()) do if m:IsA("Model") then table.insert(objects,m) end end
     end
 end
-local params=OverlapParams.new()
-params.FilterType=Enum.RaycastFilterType.Include
-params.FilterDescendantsInstances=obstacles
-local function clearSegment(a,b)
-    local v=flat(b-a)
-    if v.Magnitude<5 then return true end
-    local midpoint=(a+b)/2+Vector3.new(0,3,0)
-    local checkCF=CFrame.lookAt(midpoint,midpoint+v)
-    for _,p in ipairs(W:GetPartBoundsInBox(checkCF,
-        Vector3.new(24,7,math.max(1,v.Magnitude-6)),params)) do
-        if p.CanCollide and p.Size.Y>4 then return false end
+local overlap=OverlapParams.new()
+overlap.FilterType=Enum.RaycastFilterType.Include
+overlap.FilterDescendantsInstances=objects
+local function clear(a,b)
+    local delta=flat(b-a)
+    if delta.Magnitude<6 then return true end
+    local cf=CFrame.lookAt((a+b)/2+Vector3.new(0,3,0), (a+b)/2+Vector3.new(0,3,0)+delta)
+    for _,p in ipairs(W:GetPartBoundsInBox(cf,Vector3.new(25,8,math.max(1,delta.Magnitude-12)),overlap)) do
+        if p.CanCollide and p.Size.Y>5 then return false end
     end
     return true
 end
 
 local selected=nil
 for _,candidate in ipairs(candidates) do
-    local corner=gate+outward*candidate.forward
-    if clearSegment(start,corner) and clearSegment(corner,candidate.point) then
-        selected={start,corner,candidate.point}
-        print("[Prison65] Selected city road:",candidate.road.Name,
-            "forward",math.floor(candidate.forward),"lateral",math.floor(candidate.side))
+    local target=candidate.point
+    -- First travel away from the gate, then turn perpendicularly toward city.
+    local far=math.max(bestForward+25,flat(target-gate):Dot(outward))
+    local corner=gate+outward*far
+    if clear(startXZ,corner) and clear(corner,target) then
+        selected={startXZ,corner,target}
+        print("[Prison66] City road:",candidate.road.Name,"prison source:",bestSource)
         break
     end
 end
+-- If tight routing fails, still connect the closest unobstructed city road.
 if not selected then
-    warn("[Prison65] No collision-free road connection found; no geometry built")
-    folder:Destroy()
-    return
-end
-
-local asphalt=Color3.fromRGB(45,49,55)
-local yellow=Color3.fromRGB(235,198,63)
-local white=Color3.fromRGB(236,237,230)
-local function create(name,size,cf,color,collidable)
-    local p=Instance.new("Part")
-    p.Name=name
-    p.Anchored=true
-    p.CanCollide=collidable~=false
-    p.Color=color
-    p.Material=Enum.Material.Asphalt
-    p.Size=size
-    p.CFrame=cf
-    p.Parent=folder
-    return p
-end
-
-local function groundHeight(pos)
-    local gateY=math.min(left.Position.Y-left.Size.Y/2,right.Position.Y-right.Size.Y/2)
-    local probe=Vector3.new(pos.X,math.max(180,gateY+140),pos.Z)
-    local opts=RaycastParams.new()
-    opts.FilterType=Enum.RaycastFilterType.Exclude
-    opts.FilterDescendantsInstances={folder,prison}
-    local ray=W:Raycast(probe,Vector3.new(0,-700,0),opts)
-    if ray and ray.Normal.Y>0.75 then return ray.Position.Y end
-    return gateY
-end
-
-local function pavedSegment(a,b,first)
-    local v=flat(b-a)
-    if v.Magnitude<2 then return end
-    local count=math.max(1,math.ceil(v.Magnitude/36))
-    for i=1,count do
-        local p=a:Lerp(b,(i-1)/count)
-        local q=a:Lerp(b,i/count)
-        local groundP=groundHeight(p)
-        local groundQ=groundHeight(q)
-        -- All road pieces use the same top-level height as the ground,
-        -- avoiding the floating planks visible in earlier screenshots.
-        local aa=Vector3.new(p.X,groundP+0.2,p.Z)
-        local bb=Vector3.new(q.X,groundQ+0.2,q.Z)
-        local vector=bb-aa
-        local cf=CFrame.lookAt((aa+bb)/2,bb)
-        local length=vector.Magnitude+1.5
-        create("PrisonRoadExtension",Vector3.new(22,0.5,length),cf,asphalt,true)
-        for _,side in ipairs({-1,1}) do
-            create("RoadEdgeWhite",Vector3.new(0.28,0.06,length-0.5),
-                cf*CFrame.new(side*10,0.30,0),white,false)
-        end
-        if i%2==1 then
-            create("RoadCenterDashes",Vector3.new(0.28,0.06,math.min(9,length-0.5)),
-                cf*CFrame.new(0,0.30,0),yellow,false)
+    for _,candidate in ipairs(candidates) do
+        if clear(startXZ,candidate.point) then
+            selected={startXZ,candidate.point}
+            print("[Prison66] Direct connection to",candidate.road.Name)
+            break
         end
     end
 end
-
-for i=1,#selected-1 do
-    pavedSegment(selected[i],selected[i+1],i==1)
+if not selected then
+    warn("[Prison66] All city routes intersect buildings; no road built")
+    return
 end
-print("[Prison65] Existing prison driveway extended and connected to the city; no parking created")
+
+local folder=Instance.new("Folder")
+folder.Name="CityPrisonAccessRoad"
+folder.Parent=W
+local asphalt=Color3.fromRGB(47,51,57)
+local line=Color3.fromRGB(236,205,70)
+local function part(name,sz,cf,color,collide)
+    local p=Instance.new("Part")
+    p.Name=name;p.Anchored=true;p.CanCollide=collide~=false
+    p.Size=sz;p.CFrame=cf;p.Color=color;p.Material=Enum.Material.Asphalt
+    p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth
+    p.Parent=folder
+    return p
+end
+local groundParams=RaycastParams.new()
+groundParams.FilterType=Enum.RaycastFilterType.Exclude
+groundParams.FilterDescendantsInstances={prison,folder}
+local defaultY=math.min(left.Position.Y-left.Size.Y/2,right.Position.Y-right.Size.Y/2)
+local function surfaceHeight(p)
+    local originY=math.max(250,p.Y+140)
+    local hit=W:Raycast(Vector3.new(p.X,originY,p.Z),Vector3.new(0,-800,0),groundParams)
+    if hit and hit.Normal.Y>0.6 then return hit.Position.Y end
+    return defaultY
+end
+local function buildRoad(a,b)
+    local delta=flat(b-a)
+    if delta.Magnitude<1 then return end
+    local pieces=math.max(1,math.ceil(delta.Magnitude/30))
+    for i=0,pieces-1 do
+        local va=a:Lerp(b,i/pieces)
+        local vb=a:Lerp(b,(i+1)/pieces)
+        local ya=surfaceHeight(va)
+        local yb=surfaceHeight(vb)
+        -- The road top should sit slightly above the real visible surface.
+        local aa=Vector3.new(va.X,ya+0.24,va.Z)
+        local bb=Vector3.new(vb.X,yb+0.24,vb.Z)
+        local cf=CFrame.lookAt((aa+bb)/2,bb)
+        local length=(bb-aa).Magnitude+2
+        part("PrisonRoadExtension",Vector3.new(24,0.45,length),cf,asphalt,true)
+        local mark=part("YellowCenterMarking",Vector3.new(0.32,0.055,math.min(9,length-0.8)),
+            cf*CFrame.new(0,0.29,0),line,false)
+    end
+end
+for i=1,#selected-1 do
+    if flat(selected[i+1]-selected[i]).Magnitude>3 then
+        buildRoad(selected[i],selected[i+1])
+    end
+end
+print(string.format("[Prison66] Visible road created: %d section(s), from distance %.0f studs outside gate",
+    #selected-1,bestForward))
