@@ -51,6 +51,17 @@ function Builder.build(shop,index)
         make(room,"FrontPillar",Vector3.new(7,23,0.6),at(x,11.5,-30),wall)
     end
     make(room,"EntranceHeader",Vector3.new(13,9,0.6),at(0,18.5,-30),wall)
+    -- Solid glass storefront: only the central doorway is passable.
+    for _,x in ipairs({-19.5,19.5}) do
+        make(room,"StorefrontGlass",Vector3.new(19,22,0.35),at(x,11,-30.25),
+            Color3.fromRGB(141,210,229),Enum.Material.Glass,true,0.58)
+        for _,y in ipairs({0.5,12,22}) do
+            make(room,"WindowCrossbar",Vector3.new(19,0.3,0.6),at(x,y,-30.4),trim)
+        end
+    end
+    for _,x in ipairs({-29,-10,10,29}) do
+        make(room,"WindowMullion",Vector3.new(0.35,22,0.7),at(x,11,-30.45),trim)
+    end
     make(room,"GlassDoorOpen",Vector3.new(5,12,0.25),
         at(6,6,-27)*CFrame.Angles(0,math.rad(80),0),
         Color3.fromRGB(150,215,235),Enum.Material.Glass,false,0.6)
@@ -58,17 +69,31 @@ function Builder.build(shop,index)
     make(room,"TileFloor",Vector3.new(62,0.15,58),at(0,0.075,0),
         Color3.fromRGB(101,111,118),Enum.Material.Slate)
     -- Checkout near the front right; aisle from the front door stays clear.
-    make(room,"CheckoutCounter",Vector3.new(13,3.4,4),at(21,1.7,-20),trim)
-    make(room,"CheckoutTop",Vector3.new(13.5,0.3,4.5),at(21,3.55,-20),
-        Color3.fromRGB(126,135,139))
-    make(room,"CashRegister",Vector3.new(2.5,1.2,2),at(20,4.3,-20),
+    -- Counter along the side wall, rotated to face the customer aisle.
+    make(room,"CheckoutCounter",Vector3.new(4,3.4,13),at(24,1.7,-15),trim)
+    make(room,"CheckoutTop",Vector3.new(4.6,0.3,13.5),at(24,3.55,-15),
+        Color3.fromRGB(139,146,146))
+    make(room,"CashRegister",Vector3.new(2.2,1.2,2.5),
+        at(23.5,4.3,-19)*CFrame.Angles(0,math.rad(-90),0),
         Color3.fromRGB(28,34,40))
-    local checkout=make(room,"CheckoutInteraction",Vector3.new(2,2,2),
-        at(20,4,-23),Color3.fromRGB(0,190,140),Enum.Material.Neon,false,1)
+    make(room,"CardTerminal",Vector3.new(0.7,0.6,1),
+        at(21.5,4.2,-17),Color3.fromRGB(37,48,60))
+    local checkout=make(room,"CheckoutInteraction",Vector3.new(1.5,1.5,1.5),
+        at(20.8,4,-18),Color3.fromRGB(0,190,140),Enum.Material.Neon,false,1)
     local prompt=Instance.new("ProximityPrompt")
     prompt.Name="OpenShop";prompt.ActionText="Kup produkty"
     prompt.ObjectText="Kasa sklepu "..index;prompt.MaxActivationDistance=9
     prompt.HoldDuration=0.3;prompt.RequiresLineOfSight=false;prompt.Parent=checkout
+    -- Finishing details: cashier sign, ceiling accents, aisle headers.
+    textSign(room,"CheckoutSign","KASA",at(24,11,-29.5),Vector3.new(9,2,0.2))
+    for _,z in ipairs({-18,-2,14}) do
+        make(room,"CeilingAccent",Vector3.new(59,0.3,0.6),at(0,22.6,z),
+            Color3.fromRGB(56,80,88),Enum.Material.Metal,false)
+    end
+    for _,x in ipairs({-13,5}) do
+        make(room,"AisleHeader",Vector3.new(10,2,0.4),at(x,7,17),
+            Color3.fromRGB(35,112,98),Enum.Material.SmoothPlastic,false)
+    end
     -- Two aisles, product packages and refrigerators.
     for _,x in ipairs({-13,5}) do
         for _,z in ipairs({-8,3,14}) do
