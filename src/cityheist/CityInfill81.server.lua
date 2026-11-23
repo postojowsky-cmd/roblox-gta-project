@@ -1,41 +1,50 @@
--- CITY HEIST / STEP 81: small-scale infill district (Studio preview).
+-- CITY HEIST / STEP 84: diagnosed optional prefab infill (Studio preview).
 -- Reuses imported Creator Store prefab models, not arbitrary new towers.
 -- Keeps the proven 20 buildings and ALL roads / gameplay models unchanged.
 local RS=game:GetService("RunService")
 if not RS:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-print("[CityInfill83] START: script launched in Studio")
-if W:GetAttribute("CityInfill83Running") then
-    print("[CityInfill83] DUPLICATE: already running; skipping")
+print("[CityInfill84] START: script launched in Studio")
+if W:GetAttribute("CityInfill84Running") then
+    print("[CityInfill84] DUPLICATE: already running; skipping")
     return
 end
-W:SetAttribute("CityInfill83Running",true)
-print("[CityInfill83] Waiting for map, original buildings and asset kit")
+W:SetAttribute("CityInfill84Running",true)
+print("[CityInfill84] Waiting for map, original buildings and asset kit")
 
-local city=W:WaitForChild("CityBlockout",30)
-local roads=city and city:WaitForChild("Roads",30)
-local ground=city and city:WaitForChild("Ground",30)
-local existing=W:WaitForChild("CityHeistPrefabCity74",105)
-local stage=SS:WaitForChild("CityHeistAssetStaging",45)
-local kit=stage and stage:WaitForChild("ModernCityModularKit",90)
-local source=kit and kit:FindFirstChild("PrefabBuildings",true)
-if not (roads and ground and existing and source) then
-    warn(string.format("[CityInfill83] Missing input roads=%s ground=%s buildings=%s kit=%s source=%s",
-        tostring(roads~=nil),tostring(ground~=nil),tostring(existing~=nil),
-        tostring(kit~=nil),tostring(source~=nil)))
+-- Poll all dependencies together so a missing one cannot silently
+-- stall for several sequential 30/45/90/105-second timeouts.
+local city,roads,ground,existing,stage,kit,source
+local ready=false
+for attempt=1,50 do
+    city=W:FindFirstChild("CityBlockout")
+    roads=city and city:FindFirstChild("Roads")
+    ground=city and city:FindFirstChild("Ground")
+    existing=W:FindFirstChild("CityHeistPrefabCity74")
+    stage=SS:FindFirstChild("CityHeistAssetStaging")
+    kit=stage and stage:FindFirstChild("ModernCityModularKit")
+    source=kit and kit:FindFirstChild("PrefabBuildings",true)
+    ready=roads~=nil and ground~=nil and existing~=nil and source~=nil
+        and existing:GetAttribute("PlacementComplete")==true
+    if ready then break end
+    if attempt==1 or attempt%5==0 then
+        print(string.format("[CityInfill84] WAIT %ds | roads=%s ground=%s original=%s placed=%s import=%s kit=%s prefabFolder=%s",
+            attempt-1,tostring(roads~=nil),tostring(ground~=nil),
+            tostring(existing~=nil),
+            tostring(existing and existing:GetAttribute("PlacementComplete")),
+            tostring(stage and stage:GetAttribute("ImportStatus")),
+            tostring(kit~=nil),tostring(source~=nil)))
+    end
+    task.wait(1)
+end
+if not ready then
+    warn("[CityInfill84] Missing readiness after 50s, skipping only optional infill")
     return
 end
-local waited=0
-while not existing:GetAttribute("PlacementComplete") and waited<40 do
-    task.wait(.5);waited+=.5
-end
-if not existing:GetAttribute("PlacementComplete") then
-    warn("[CityInfill83] Main buildings not complete; skipping infill")
-    return
-end
+print("[CityInfill84] READY: all source assets and main buildings loaded")
 
-print("[CityInfill83] Inputs ready; scanning prefab catalog")
+print("[CityInfill84] Inputs ready; scanning prefab catalog")
 local candidates={}
 local scanned=0
 for _,m in ipairs(source:GetDescendants()) do
@@ -64,11 +73,11 @@ table.sort(candidates,function(a,b)
     if a.height==b.height then return a.model.Name<b.model.Name end
     return a.height<b.height
 end)
-print(string.format("[CityInfill83] %d usable candidates; height range %.0f..%.0f",
+print(string.format("[CityInfill84] %d usable candidates; height range %.0f..%.0f",
     #candidates,#candidates>0 and candidates[1].height or 0,
     #candidates>0 and candidates[#candidates].height or 0))
 if #candidates==0 then
-    warn("[CityInfill83] No complete prefab buildings match proven city generator criteria; no buildings added")
+    warn("[CityInfill84] No complete prefab buildings match proven city generator criteria; no buildings added")
     return
 end
 
@@ -93,7 +102,7 @@ for _,p in ipairs(roads:GetDescendants()) do
         end
     end
 end
-if #roadParts<4 then warn("[CityInfill83] No valid road grid");result:Destroy();return end
+if #roadParts<4 then warn("[CityInfill84] No valid road grid");result:Destroy();return end
 local blocked={roads,existing,result}
 for _,key in ipairs({"GameplayLocations","CityLocations","Downtown","CityGarages","CityDecorativeHomes"}) do
     local folder=city:FindFirstChild(key)
@@ -137,7 +146,7 @@ table.sort(points,function(a,b)
     return a.score<b.score
 end)
 
-print(string.format("[CityInfill83] Found %d roads, %d candidate plots; checking free sites",#roadParts,#points))
+print(string.format("[CityInfill84] Found %d roads, %d candidate plots; checking free sites",#roadParts,#points))
 local count=0
 local MAX=8
 local attempts=math.min(#candidates,18)
@@ -170,7 +179,7 @@ for _,pt in ipairs(points) do
                 local bottom=box.Position.Y-actual.Y/2
                 model:PivotTo(model:GetPivot()+Vector3.new(0,y-bottom+.1,0))
                 count+=1
-                print(string.format("[CityInfill83] PLACED %02d %s | %.0fx%.0fx%.0f | X %.0f Z %.0f",
+                print(string.format("[CityInfill84] PLACED %02d %s | %.0fx%.0fx%.0f | X %.0f Z %.0f",
                     count,entry.model.Name,sz.X,sz.Y,sz.Z,pt.x,pt.z))
                 break
             end
@@ -180,5 +189,5 @@ end
 result:SetAttribute("PlacementComplete",true)
 result:SetAttribute("BuildingCount",count)
 print(string.format(
-    "[CityInfill83] DONE: %d extra prefabs selected shortest-first, %d eligible prefabs; original 20 and city roads unchanged",
+    "[CityInfill84] DONE: %d extra prefabs selected shortest-first, %d eligible prefabs; original 20 and city roads unchanged",
     count,#candidates))
