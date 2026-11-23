@@ -269,9 +269,19 @@ local function roadway(name,a,b,w,color)
     end
 end
 
--- City drive starts on the side parking's OUTER edge, not at the prison gate.
-local cityEdge=lotCF:PointToWorldSpace(Vector3.new(0,0,-DEPTH/2+1))
-local start=Vector3.new(cityEdge.X,floor+0.45,cityEdge.Z)+outward*2
+-- The red sketch connects the parking SIDE facing the city road, not a
+-- driveway aimed away from the prison or through the entrance courtyard.
+local closestForEntrance=closestCityRoad(lotCF.Position)
+local localDirection=lotCF:VectorToObjectSpace(horizontal(closestForEntrance-lotCF.Position))
+local sideExit
+if math.abs(localDirection.X)>math.abs(localDirection.Z) then
+    sideExit=Vector3.new((localDirection.X>=0 and 1 or -1)*(WIDTH/2-2),0,0)
+else
+    sideExit=Vector3.new(0,0,(localDirection.Z>=0 and 1 or -1)*(DEPTH/2-2))
+end
+local cityEdge=lotCF:PointToWorldSpace(sideExit)
+local start=Vector3.new(cityEdge.X,floor+0.45,cityEdge.Z)
+
 local roadOptions={}
 for _,road in ipairs(roadParts) do
     local destination=closestOnRoad(road,start)
