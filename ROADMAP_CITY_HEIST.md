@@ -32,3 +32,7 @@
 - Uzytkownik potwierdzil: po 30 sekundach napadu otrzymuje pieniadze; policja pojawia sie dopiero po wyplacie.
 - BankPursuitDelay.server.lua dziala w Studio; etap napadow MVP zaliczony.
 - Kolejny priorytet: sklepy i podstawowe interakcje / ekonomia, bez dopracowywania policji.
+
+## Sklepy i rozmieszczenie miasta — 23.11.2026
+- Sklepy MVP v1 dodane na GitHubie: Shop_1–Shop_4, terminale, menu, przekaska (+20 HP za 75 Money), apteczka (+75 HP za 250 Money). Czeka na test uzytkownika.
+- W przyszlym etapie mapy rozstawic banki, sklepy, komisariaty i inne lokacje w roznych dzielnicach; unikac banku obok banku. Nie przesuwac teraz budynkow bez audytu drog i wejsc.
