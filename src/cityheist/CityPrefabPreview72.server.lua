@@ -1,171 +1,179 @@
--- CITY HEIST / Step 72: first prefab-based neighborhood preview.
--- Reuses ACTUAL Roblox Creator Store meshes from the imported modular kit.
--- Runs only in Studio Play, away from the existing city. No gameplay replaced.
+-- CITY HEIST / Step 74: move real prefab buildings ONTO EXISTING CITY PLOTS.
+-- No duplicate road system and no distant floating test district.
+-- Does not touch existing skyscrapers, gameplay buildings or road geometry.
 local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
-local Workspace=game:GetService("Workspace")
-local ServerStorage=game:GetService("ServerStorage")
-if Workspace:GetAttribute("CityPrefab73Running") then return end
-Workspace:SetAttribute("CityPrefab73Running",true)
+local W=game:GetService("Workspace")
+local SS=game:GetService("ServerStorage")
+if W:GetAttribute("CityPrefab74Running") then return end
+W:SetAttribute("CityPrefab74Running",true)
 
--- Existing road grid occupies approximately X -364..1136, Z -773..727.
--- Keep the preview outside it, away from the prison (east of city).
-local SITE=Vector3.new(320,2,1380)
-local MAX_BUILDINGS=12
-local MAX_PARTS_PER_BUILDING=850
-local COLUMNS=4
-local ROWS=3
-local BLOCK=140
-local stage=ServerStorage:WaitForChild("CityHeistAssetStaging",30)
-if not stage then warn("[CityPrefab72] Asset staging missing");return end
-local kit=stage:WaitForChild("ModernCityModularKit",30)
-if not kit then warn("[CityPrefab72] Imported kit missing");return end
-local prefabFolder=kit:FindFirstChild("PrefabBuildings",true)
-if not prefabFolder then warn("[CityPrefab72] PrefabBuildings not found");return end
-
-local old=Workspace:FindFirstChild("CityHeistPrefabPreview72")
-if old then old:Destroy() end
-local preview=Instance.new("Model")
-preview.Name="CityHeistPrefabPreview72"
-preview:SetAttribute("StudioOnly",true)
-preview.Parent=Workspace
-
-local function basePart(name,size,cf,color,material,collide)
-    local p=Instance.new("Part")
-    p.Name=name;p.Size=size;p.CFrame=cf;p.Anchored=true
-    p.CanCollide=collide~=false;p.Color=color
-    p.Material=material or Enum.Material.SmoothPlastic
-    p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth
-    p.Parent=preview
-    return p
-end
-local function isPrefab(model)
-    if not model:IsA("Model") then return nil end
-    local pieces=0
-    for _,p in ipairs(model:GetDescendants()) do
-        if p:IsA("BasePart") then pieces+=1 end
-        if pieces>MAX_PARTS_PER_BUILDING then return nil end
-    end
-    if pieces<8 then return nil end
-    local ok,cf,dimensions=pcall(function()
-        local bound,size=model:GetBoundingBox()
-        return bound,size
-    end)
-    if not ok or not dimensions then return nil end
-    local x,z=dimensions.X,dimensions.Z
-    if x<9 or z<9 or x>110 or z>110 or dimensions.Y<7 or dimensions.Y>180 then
-        return nil
-    end
-    return {model=model,parts=pieces,size=dimensions,cf=cf}
-end
-local candidates={}
--- The root contains a mix of folders, group models and individual prefabs.
--- Prefer direct children; use nested models only if no direct candidate exists.
-local function collect(children)
-    for _,obj in ipairs(children) do
-        local candidate=isPrefab(obj)
-        if candidate then table.insert(candidates,candidate) end
-    end
-end
-collect(prefabFolder:GetChildren())
-if #candidates==0 then
-    for _,obj in ipairs(prefabFolder:GetDescendants()) do
-        local candidate=isPrefab(obj)
-        if candidate then table.insert(candidates,candidate) end
-    end
-end
-table.sort(candidates,function(a,b)
-    if a.parts==b.parts then return a.model.Name<b.model.Name end
-    return a.parts>b.parts
-end)
-
-print(string.format("[CityPrefab72] PrefabBuildings: %d usable candidates",#candidates))
-for i=1,math.min(#candidates,12) do
-    local item=candidates[i]
-    print(string.format("[CityPrefab72] CANDIDATE %02d %s | %.0f x %.0f x %.0f | %d parts",
-        i,item.model:GetFullName(),item.size.X,item.size.Y,item.size.Z,item.parts))
-end
-if #candidates==0 then
-    warn("[CityPrefab72] No complete prefabs matched safe bounds; no sample district made")
-    preview:Destroy()
+local city=W:WaitForChild("CityBlockout",25)
+local stage=SS:WaitForChild("CityHeistAssetStaging",30)
+local kit=stage and stage:FindFirstChild("ModernCityModularKit")
+local prefabs=kit and kit:FindFirstChild("PrefabBuildings",true)
+local roads=city and city:FindFirstChild("Roads")
+local ground=city and city:FindFirstChild("Ground")
+if not (prefabs and roads and ground) then
+    warn("[CityPrefab74] Required imported kit or map geometry not available")
     return
 end
+-- Layout scripts create the map during server startup.
+task.wait(8)
 
-local roadColor=Color3.fromRGB(49,54,61)
-local walkColor=Color3.fromRGB(169,176,181)
-local vergeColor=Color3.fromRGB(118,141,125)
-local white=Color3.fromRGB(233,235,227)
-local yellow=Color3.fromRGB(239,205,93)
-local minX=SITE.X-COLUMNS*BLOCK/2
-local minZ=SITE.Z-ROWS*BLOCK/2
-local totalW=COLUMNS*BLOCK
-local totalD=ROWS*BLOCK
-
--- Continuous orthogonal network: roads are centered on block BOUNDARIES,
--- so prefab parcels sit in the centers and don't overlap traffic lanes.
-for j=0,ROWS do
-    local z=minZ+j*BLOCK
-    basePart("EastWestRoad_"..j,Vector3.new(totalW+30,.7,25),
-        CFrame.new(SITE.X,SITE.Y-.34,z),roadColor,Enum.Material.Asphalt)
-    for _,side in ipairs({-1,1}) do
-        basePart("EastWestPavement_"..j,Vector3.new(totalW+30,.35,5),
-            CFrame.new(SITE.X,SITE.Y-.13,z+side*15.3),walkColor,Enum.Material.Concrete)
-    end
-    for x=minX+14,minX+totalW-12,26 do
-        basePart("RoadDashEW",Vector3.new(11,.04,.36),
-            CFrame.new(x,SITE.Y+.06,z),yellow,nil,false)
-    end
+for _,name in ipairs({"CityHeistPrefabPreview72","CityHeistPrefabCity74"}) do
+    local prior=W:FindFirstChild(name)
+    if prior then prior:Destroy() end
 end
-for i=0,COLUMNS do
-    local x=minX+i*BLOCK
-    basePart("NorthSouthRoad_"..i,Vector3.new(25,.7,totalD+30),
-        CFrame.new(x,SITE.Y-.34,SITE.Z),roadColor,Enum.Material.Asphalt)
-    for _,side in ipairs({-1,1}) do
-        basePart("NorthSouthPavement_"..i,Vector3.new(5,.35,totalD+30),
-            CFrame.new(x+side*15.3,SITE.Y-.13,SITE.Z),walkColor,Enum.Material.Concrete)
-    end
-    for z=minZ+14,minZ+totalD-12,26 do
-        basePart("RoadDashNS",Vector3.new(.36,.04,11),
-            CFrame.new(x,SITE.Y+.06,z),yellow,nil,false)
-    end
-end
+local target=Instance.new("Folder")
+target.Name="CityHeistPrefabCity74"
+target:SetAttribute("TestPlacement",true)
+target.Parent=W
 
-local used=0
-local candidateCount=#candidates
--- Reuse distinct genuine prefabs when the catalog has fewer than 12 choices.
--- Layout is deterministic and cells are nonoverlapping.
-for row=1,ROWS do
-    for col=1,COLUMNS do
-        local ordinal=(row-1)*COLUMNS+col
-        local entry=candidates[((ordinal-1)%candidateCount)+1]
-        local x=minX+(col-.5)*BLOCK
-        local z=minZ+(row-.5)*BLOCK
-        local clone=entry.model:Clone()
-        for _,node in ipairs(clone:GetDescendants()) do
-            if node:IsA("LuaSourceContainer") then node:Destroy()
-            elseif node:IsA("BasePart") then node.Anchored=true end
+local MAX_BUILDINGS=12
+local MAX_PARTS_PER_BUILDING=800
+local candidates={}
+local function register(m)
+    if not m:IsA("Model") then return end
+    local count=0
+    for _,v in ipairs(m:GetDescendants()) do
+        if v:IsA("BasePart") then count+=1 end
+        if count>MAX_PARTS_PER_BUILDING then return end
+    end
+    if count<8 then return end
+    local ok,cf,size=pcall(function()return m:GetBoundingBox()end)
+    if not ok or not size then return end
+    if size.X<9 or size.Z<9 or size.Y<8 or
+       size.X>105 or size.Z>105 or size.Y>150 then return end
+    table.insert(candidates,{model=m,count=count,size=size})
+end
+for _,obj in ipairs(prefabs:GetChildren()) do register(obj) end
+if #candidates==0 then
+    for _,obj in ipairs(prefabs:GetDescendants()) do register(obj) end
+end
+table.sort(candidates,function(a,b)
+    if a.count==b.count then return a.model.Name<b.model.Name end
+    return a.count>b.count
+end)
+if #candidates==0 then warn("[CityPrefab74] No usable prefab models");return end
+
+local roadParts={}
+local minX,maxX,minZ,maxZ=math.huge,-math.huge,math.huge,-math.huge
+for _,p in ipairs(roads:GetDescendants()) do
+    if p:IsA("BasePart") and p.Size.X>6 and p.Size.Z>6 then
+        table.insert(roadParts,p)
+        for _,x in ipairs({-p.Size.X/2,p.Size.X/2}) do
+            for _,z in ipairs({-p.Size.Z/2,p.Size.Z/2}) do
+                local pt=p.CFrame:PointToWorldSpace(Vector3.new(x,0,z))
+                minX=math.min(minX,pt.X);maxX=math.max(maxX,pt.X)
+                minZ=math.min(minZ,pt.Z);maxZ=math.max(maxZ,pt.Z)
+            end
         end
-        clone.Name=string.format("Building_%02d_%s",ordinal,entry.model.Name)
-        clone.Parent=preview
-        local ok,box,size=pcall(function() return clone:GetBoundingBox() end)
-        if ok and size then
-            local pivot=clone:GetPivot()
-            local offset=pivot.Position.Y-(box.Position.Y-size.Y/2)
-            -- Rotate full prefabs by 180 on alternate rows, without modifying
-            -- their interior structure or scaling/distorting mesh geometry.
-            local rotate=(row%2==0) and CFrame.Angles(0,math.pi,0) or CFrame.new()
-            clone:PivotTo(CFrame.new(x,SITE.Y+offset,z)*rotate*pivot.Rotation)
-            basePart("BuildingParcel_"..ordinal,Vector3.new(112,.5,111),
-                CFrame.new(x,SITE.Y-.3,z),vergeColor,Enum.Material.Concrete)
-            used+=1
-            print(string.format("[CityPrefab73] PLACED %02d | %s | %d parts",
-                ordinal,entry.model.Name,entry.parts))
-        else
-            clone:Destroy()
-            warn("[CityPrefab73] Could not bound prefab: "..entry.model.Name)
+    end
+end
+if #roadParts<4 then warn("[CityPrefab74] Road grid not detected");return end
+
+local occupied={}
+for _,folderName in ipairs({"GameplayLocations","CityLocations","Downtown","CityGarages"}) do
+    local f=city:FindFirstChild(folderName)
+    if f then table.insert(occupied,f) end
+end
+for _,name in ipairs({"CityPrison","CityHeistGarageSpawned","CityDecorativeHomes"}) do
+    local instance=W:FindFirstChild(name) or city:FindFirstChild(name)
+    if instance then table.insert(occupied,instance) end
+end
+-- Do not construct over existing city roads or important gameplay objects.
+table.insert(occupied,roads)
+local overlaps=OverlapParams.new()
+overlaps.FilterType=Enum.RaycastFilterType.Include
+overlaps.FilterDescendantsInstances=occupied
+overlaps.MaxParts=1
+local groundRay=RaycastParams.new()
+groundRay.FilterType=Enum.RaycastFilterType.Include
+groundRay.FilterDescendantsInstances={ground}
+
+local function surface(x,z)
+    local ray=W:Raycast(Vector3.new(x,350,z),Vector3.new(0,-800,0),groundRay)
+    if ray and ray.Normal.Y>.88 then return ray.Position.Y end
+    return nil
+end
+local function free(x,y,z,w,d)
+    local origin=CFrame.new(x,y+12,z)
+    local found=W:GetPartBoundsInBox(origin,Vector3.new(w+14,26,d+14),overlaps)
+    if #found>0 then return false end
+    for _,item in ipairs(target:GetChildren()) do
+        if item:IsA("Model") then
+            local bounds,size=item:GetBoundingBox()
+            if math.abs(bounds.Position.X-x)<(size.X+w)/2+12
+               and math.abs(bounds.Position.Z-z)<(size.Z+d)/2+12 then
+                return false
+            end
+        end
+    end
+    return true
+end
+local plots={}
+local centerX=(minX+maxX)/2
+local centerZ=(minZ+maxZ)/2
+-- Search only the city's own road-grid extent. A broad grid gives genuine
+-- vacant lots, unlike the previous floating satellite district.
+for x=minX+55,maxX-55,52 do
+    for z=minZ+55,maxZ-55,52 do
+        local dx=(x-centerX)/(maxX-minX)
+        local dz=(z-centerZ)/(maxZ-minZ)
+        local distance=math.sqrt(dx*dx+dz*dz)
+        -- Mixture of center/outer plots, but no extra far-away island.
+        table.insert(plots,{x=x,z=z,priority=distance})
+    end
+end
+table.sort(plots,function(a,b)
+    if a.priority==b.priority then
+        if a.x==b.x then return a.z<b.z end
+        return a.x<b.x
+    end
+    return a.priority<b.priority
+end)
+
+local built=0
+for _,plot in ipairs(plots) do
+    if built>=MAX_BUILDINGS then break end
+    local entry=candidates[(built%#candidates)+1]
+    local size=entry.size
+    -- Bounding boxes, not the parcel center, determine safety.
+    local y=surface(plot.x,plot.z)
+    if y then
+        local flat=true
+        for _,dx in ipairs({-size.X/2-3,size.X/2+3}) do
+            for _,dz in ipairs({-size.Z/2-3,size.Z/2+3}) do
+                local y2=surface(plot.x+dx,plot.z+dz)
+                if not y2 or math.abs(y2-y)>1.5 then flat=false end
+            end
+        end
+        if flat and free(plot.x,y,plot.z,size.X,size.Z) then
+            local copy=entry.model:Clone()
+            for _,child in ipairs(copy:GetDescendants()) do
+                if child:IsA("LuaSourceContainer") then child:Destroy() end
+                if child:IsA("BasePart") then child.Anchored=true end
+            end
+            copy.Name=string.format("CityPrefab_%02d_%s",built+1,entry.model.Name)
+            copy.Parent=target
+            local ok,bounds,realSize=pcall(function()
+                return copy:GetBoundingBox()
+            end)
+            if ok and realSize then
+                local pivot=copy:GetPivot()
+                local offset=pivot.Position.Y-(bounds.Position.Y-realSize.Y/2)
+                copy:PivotTo(CFrame.new(plot.x,y+offset,plot.z)*pivot.Rotation)
+                built+=1
+                print(string.format(
+                    "[CityPrefab74] PLACED %02d %s on existing map (X %.0f Z %.0f)",
+                    built,entry.model.Name,plot.x,plot.z))
+            else
+                copy:Destroy()
+            end
         end
     end
 end
 print(string.format(
-    "[CityPrefab73] 4x3 district: %d prefab buildings; %d available distinct prefabs; crossroads and sidewalks generated. Preview near X=%.0f, Z=%.0f. Live city unchanged.",
-    used,candidateCount,SITE.X,SITE.Z))
+    "[CityPrefab74] %d genuine prefab buildings placed within original city; no duplicate roads or distant preview; original buildings unchanged",
+    built))
