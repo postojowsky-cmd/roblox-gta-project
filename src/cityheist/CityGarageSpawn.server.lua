@@ -67,8 +67,7 @@ local function freeSlot(garage)
 end
 
 local function respond(player, ok, message)
-    local car = active:FindFirstChild("Vehicle_" .. player.UserId)
-    event:FireClient(player, ok, message, car ~= nil)
+    event:FireClient(player, ok, message)
 end
 
 event.OnServerEvent:Connect(function(player, vehicleName)
@@ -93,13 +92,6 @@ event.OnServerEvent:Connect(function(player, vehicleName)
         respond(player, false, "Podejdz do terminala garazu")
         return
     end
-    local previous = active:FindFirstChild("Vehicle_" .. player.UserId)
-    if previous then
-        previous:Destroy()
-        respond(player, true, "Samochod schowany do garazu")
-        print("[CityGarageStore]", player.Name, garage.Name)
-        return
-    end
     local slot = freeSlot(garage)
     if not slot then
         respond(player, false, "Brak wolnych miejsc")
@@ -111,6 +103,9 @@ event.OnServerEvent:Connect(function(player, vehicleName)
         respond(player, false, "Brak modelu Saab Ready na serwerze")
         return
     end
+
+    local previous = active:FindFirstChild("Vehicle_" .. player.UserId)
+    if previous then previous:Destroy() end
 
     local car = source:Clone()
     car.Name = "Vehicle_" .. player.UserId
