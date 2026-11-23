@@ -5,7 +5,7 @@ local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-if W:GetAttribute("CityPrefab77Running") then return end
+if W:GetAttribute("CityPrefab79Running") then return end
 W:SetAttribute("CityPrefab77Running",true)
 
 local city=W:WaitForChild("CityBlockout",30)
@@ -43,7 +43,7 @@ target.Name="CityHeistPrefabCity74"
 target:SetAttribute("TestPlacement",true)
 target.Parent=W
 
-local MAX_BUILDINGS=12
+local MAX_BUILDINGS=20
 local MAX_PARTS_PER_BUILDING=800
 local candidates={}
 local function register(m)
@@ -212,7 +212,7 @@ for _,plot in ipairs(plots) do
                 built+=1
                 usedNames[found.model.Name]=true
                 print(string.format(
-                    "[CityPrefab77] PLACED %02d %s at X %.0f Z %.0f | %.0fx%.0f",
+                    "[CityPrefab79] PLACED %02d %s at X %.0f Z %.0f | %.0fx%.0f",
                     built,found.model.Name,plot.x,plot.z,pickedSize.X,pickedSize.Z))
             else
                 copy:Destroy()
@@ -222,6 +222,8 @@ for _,plot in ipairs(plots) do
         skippedTerrain+=1
     end
 end
+target:SetAttribute("PlacementComplete",true)
+target:SetAttribute("BuildingCount",built)
 print(string.format(
-    "[CityPrefab77] DONE: %d buildings, %d prefab candidates, %d terrain-missing plots; roads and gameplay buildings unchanged",
+    "[CityPrefab79] DONE: %d buildings, %d prefab candidates, %d terrain-missing plots; roads and gameplay buildings unchanged",
     built,#candidates,skippedTerrain))
