@@ -1,136 +1,446 @@
--- Step 59: spacious prison visitor parking, replacing the long road.
--- Studio-only preview. Never touches prison logic or permanent Studio objects.
-local RunService=game:GetService("RunService")
-if not RunService:IsStudio() then return end
-local W=game:GetService("Workspace")
-local city=W:WaitForChild("CityBlockout",20)
-local prison=W:WaitForChild("CityPrison",20)
-local roads=city and city:FindFirstChild("Roads")
-if not (prison and roads) then return end
-task.wait(7)
+-- CITY HEIST
+-- CityPrisonAccess.server.lua
+-- Stabilna wersja:
+-- 1) wykrywa więzienie
+-- 2) szuka najbliższej drogi w CityBlockout.Roads
+-- 3) generuje DUŻY parking przed bramą
+-- 4) buduje pełną drogę dojazdową do miasta
+-- 5) dodaje otoczenie: chodnik, lampy, budkę, zieleń
 
-local old=W:FindFirstChild("CityPrisonAccess56")
-if old then old:Destroy() end
+local Workspace = game:GetService("Workspace")
 
-local bounds,size=prison:GetBoundingBox()
-local prisonCenter=bounds.Position
-local pillars={}
-for _,obj in ipairs(prison:GetDescendants()) do
-    if obj:IsA("BasePart") then
-        local n=obj.Name:lower()
-        if n:find("gatepillar",1,true) or n:find("gate_pillar",1,true) then
-            table.insert(pillars,obj)
-        end
-    end
-end
-if #pillars<2 then
-    warn("[Prison59] Gate pillars missing; parking skipped to avoid wrong placement")
-    return
-end
--- Prefer matching L/R pillars rather than unrelated decorative parts.
-local left,right
-for _,p in ipairs(pillars) do
-    local n=p.Name:lower()
-    if n:find("gatepillarl",1,true) then left=p end
-    if n:find("gatepillarr",1,true) then right=p end
-end
-if not left or not right then
-    table.sort(pillars,function(a,b)
-        return (a.Position-prisonCenter).Magnitude>(b.Position-prisonCenter).Magnitude
-    end)
-    left,right=pillars[1],pillars[2]
-end
-local gate=(left.Position+right.Position)/2
-local outward=Vector3.new(gate.X-prisonCenter.X,0,gate.Z-prisonCenter.Z)
-if outward.Magnitude<2 then warn("[Prison59] Gate direction ambiguous");return end
-outward=outward.Unit
-local parkingCenter=gate+outward*48
-local parkingWidth=100
-local parkingDepth=76
+local CITY = Workspace:WaitForChild("CityBlockout")
+local ROADS = CITY:WaitForChild("Roads")
+local PRISON = Workspace:WaitForChild("CityPrison")
 
-local bestRoad,bestPoint,bestDist
-bestDist=math.huge
-for _,road in ipairs(roads:GetDescendants()) do
-    if road:IsA("BasePart") and road.Size.X>5 and road.Size.Z>5 then
-        local p=road.CFrame:PointToObjectSpace(parkingCenter)
-        local x=math.clamp(p.X,-road.Size.X/2,road.Size.X/2)
-        local z=math.clamp(p.Z,-road.Size.Z/2,road.Size.Z/2)
-        local point=road.CFrame:PointToWorldSpace(Vector3.new(x,road.Size.Y/2,z))
-        local distance=(Vector3.new(point.X,0,point.Z)-Vector3.new(parkingCenter.X,0,parkingCenter.Z)).Magnitude
-        if distance<bestDist then
-            bestDist=distance;bestRoad=road;bestPoint=point
-        end
-    end
+local GENERATED_NAME = "CityPrisonGenerated"
+
+local PARKING_WIDTH = 76
+local PARKING_LENGTH = 100
+local ROAD_WIDTH = 18
+local SIDEWALK_WIDTH = 6
+
+local function log(...)
+	print("[PrisonAccessFixed]", ...)
 end
--- Use the actual prison entrance height, NOT a distant city road (234 studs away).
-local surfaceY=math.min(left.Position.Y-left.Size.Y/2,right.Position.Y-right.Size.Y/2)+0.12
-local center=Vector3.new(parkingCenter.X,surfaceY,parkingCenter.Z)
--- Local +Z faces the prison's opposite direction, leaving the entry open.
-local facing=CFrame.lookAt(center,Vector3.new(gate.X,surfaceY,gate.Z))
-local obstacles={}
-for _,folderName in ipairs({"GameplayLocations","Downtown","CityLocations","CityGarages"}) do
-    local folder=city:FindFirstChild(folderName)
-    if folder then
-        for _,obj in ipairs(folder:GetChildren()) do
-            if obj:IsA("Model") then table.insert(obstacles,obj) end
-        end
-    end
+
+local function clearGenerated()
+	local old = Workspace:FindFirstChild(GENERATED_NAME)
+	if old then
+		old:Destroy()
+	end
 end
-if #obstacles>0 then
-    local overlap=OverlapParams.new()
-    overlap.FilterType=Enum.RaycastFilterType.Include
-    overlap.FilterDescendantsInstances=obstacles
-    if #W:GetPartBoundsInBox(facing,Vector3.new(parkingWidth,8,parkingDepth),overlap)>0 then
-        warn("[Prison59] Parking conflicts with a city building; skipped")
-        return
-    end
+
+local function makeFolder()
+	local folder = Instance.new("Folder")
+	folder.Name = GENERATED_NAME
+	folder.Parent = Workspace
+	return folder
 end
-local folder=Instance.new("Folder")
-folder.Name="CityPrisonAccess56"
-folder.Parent=W
-local function part(name,sz,cf,color,material,collide)
-    local p=Instance.new("Part")
-    p.Name=name
-    p.Anchored=true
-    p.CanCollide=collide
-    p.Material=material or Enum.Material.SmoothPlastic
-    p.Color=color
-    p.Size=sz
-    p.CFrame=cf
-    p.Parent=folder
-    return p
+
+local function createPart(parent, name, size, cf, color, material)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Anchored = true
+	p.CanCollide = true
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color or Color3.fromRGB(120, 120, 120)
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = parent
+	return p
 end
-local asphalt=Color3.fromRGB(58,62,69)
-local white=Color3.fromRGB(230,231,225)
-part("PrisonVisitorParking",Vector3.new(parkingWidth,0.32,parkingDepth),facing,asphalt,Enum.Material.Asphalt,true)
--- Two rows of 8 spaces; a wide central maneuvering aisle remains free.
-for _,z in ipairs({-23,23}) do
-    for i=0,8 do
-        local x=-44+i*11
-        part("ParkingBayDivider",Vector3.new(0.23,0.04,19),
-            facing*CFrame.new(x,0.20,z),white,nil,false)
-    end
-    part("ParkingBayBackLine",Vector3.new(88,0.04,0.23),
-        facing*CFrame.new(0,0.20,z+(z<0 and -9.5 or 9.5)),white,nil,false)
+
+local function createModel(parent, name)
+	local m = Instance.new("Model")
+	m.Name = name
+	m.Parent = parent
+	return m
 end
--- Broad, short apron between prison entrance and parking; no 218-stud strip.
-local entryPoint=Vector3.new(gate.X,surfaceY,gate.Z)
-local nearEdge=facing:PointToWorldSpace(Vector3.new(0,0,parkingDepth/2-2))
-local delta=Vector3.new(nearEdge.X-entryPoint.X,0,nearEdge.Z-entryPoint.Z)
-if delta.Magnitude>3 and delta.Magnitude<60 then
-    local middle=(entryPoint+nearEdge)/2
-    local linkCF=CFrame.lookAt(middle,nearEdge)
-    part("GateApron",Vector3.new(23,0.32,delta.Magnitude+3),
-        linkCF,asphalt,Enum.Material.Asphalt,true)
+
+local function gatherRoadParts(root, out)
+	for _, child in ipairs(root:GetChildren()) do
+		if child:IsA("BasePart") then
+			table.insert(out, child)
+		else
+			gatherRoadParts(child, out)
+		end
+	end
 end
--- Entrance-side bollards and soft lights, kept away from the drive aisle.
-for _,x in ipairs({-45,45}) do
-    local base=facing:PointToWorldSpace(Vector3.new(x,0,34))
-    local post=part("ParkingLightPost",Vector3.new(0.7,12,0.7),
-        CFrame.new(base+Vector3.new(0,6,0)),Color3.fromRGB(65,70,77),Enum.Material.Metal,true)
-    local lamp=part("ParkingLamp",Vector3.new(2.8,0.5,2.8),
-        CFrame.new(base+Vector3.new(0,12.3,0)),Color3.fromRGB(245,239,196),Enum.Material.Neon,false)
-    local light=Instance.new("PointLight")
-    light.Range=38;light.Brightness=2;light.Parent=lamp
+
+local function findNearestPointOnPartXZ(part, worldPoint)
+	local localPoint = part.CFrame:PointToObjectSpace(worldPoint)
+	local sx = part.Size.X * 0.5
+	local sz = part.Size.Z * 0.5
+
+	local clampedX = math.clamp(localPoint.X, -sx, sx)
+	local clampedZ = math.clamp(localPoint.Z, -sz, sz)
+
+	local result = part.CFrame:PointToWorldSpace(Vector3.new(clampedX, 0, clampedZ))
+	return Vector3.new(result.X, part.Position.Y + part.Size.Y * 0.5, result.Z)
 end
-print(string.format("[Prison59] Parking 100x76 placed at prison gate; nearest city road %.0f studs away (not used for parking height)",bestDist))
+
+local function flat(v)
+	return Vector3.new(v.X, 0, v.Z)
+end
+
+local function distanceXZ(a, b)
+	return (flat(a) - flat(b)).Magnitude
+end
+
+local function findGateCenter()
+	local left = PRISON:FindFirstChild("GatePillarL", true)
+	local right = PRISON:FindFirstChild("GatePillarR", true)
+
+	if left and right and left:IsA("BasePart") and right:IsA("BasePart") then
+		return (left.Position + right.Position) * 0.5
+	end
+
+	local gate = PRISON:FindFirstChild("Gate", true)
+		or PRISON:FindFirstChild("MainGate", true)
+		or PRISON:FindFirstChild("Entrance", true)
+
+	if gate and gate:IsA("BasePart") then
+		return gate.Position
+	end
+
+	local cf = PRISON:GetPivot()
+	return cf.Position
+end
+
+local function findNearestRoadPoint(fromPoint)
+	local roads = {}
+	gatherRoadParts(ROADS, roads)
+
+	local bestPart = nil
+	local bestPoint = nil
+	local bestDistance = math.huge
+
+	for _, road in ipairs(roads) do
+		local p = findNearestPointOnPartXZ(road, fromPoint)
+		local d = distanceXZ(fromPoint, p)
+		if d < bestDistance then
+			bestDistance = d
+			bestDistance = d
+			bestPart = road
+			bestPoint = p
+		end
+	end
+
+	return bestPart, bestPoint, bestDistance
+end
+
+local function midpoint(a, b)
+	return (a + b) * 0.5
+end
+
+local function buildRectBetween(parent, name, a, b, width, thickness, color, material)
+	local dir = flat(b - a)
+	local len = dir.Magnitude
+	if len < 1 then
+		return nil
+	end
+
+	local center = midpoint(a, b)
+	local look = CFrame.lookAt(center, center + dir.Unit)
+	local cf = look
+	local size = Vector3.new(width, thickness, len)
+
+	return createPart(parent, name, size, cf, color, material)
+end
+
+local function buildAxisRoad(parent, a, b, namePrefix)
+	local ax = Vector3.new(a.X, a.Y, a.Z)
+	local bx = Vector3.new(b.X, a.Y, a.Z)
+	local cx = Vector3.new(b.X, a.Y, b.Z)
+
+	if math.abs(a.X - b.X) > 0.5 then
+		buildRectBetween(
+			parent,
+			namePrefix .. "_A",
+			ax,
+			bx,
+			ROAD_WIDTH,
+			1,
+			Color3.fromRGB(58, 58, 62),
+			Enum.Material.Asphalt
+		)
+	end
+
+	if math.abs(a.Z - b.Z) > 0.5 then
+		buildRectBetween(
+			parent,
+			namePrefix .. "_B",
+			bx,
+			cx,
+			ROAD_WIDTH,
+			1,
+			Color3.fromRGB(58, 58, 62),
+			Enum.Material.Asphalt
+		)
+	end
+end
+
+local function createParkingLines(parent, parkingCenter, forward, right, width, length)
+	local linesModel = createModel(parent, "ParkingLines")
+	local rows = 2
+	local spacesPerRow = 8
+	local rowOffset = length * 0.22
+	local usableWidth = width - 14
+	local spacing = usableWidth / spacesPerRow
+
+	for row = 1, rows do
+		local sign = row == 1 and -1 or 1
+		local zBase = sign * rowOffset
+
+		for i = 1, spacesPerRow do
+			local x = -usableWidth * 0.5 + spacing * (i - 0.5)
+			local pos = parkingCenter + right * x + forward * zBase
+
+			local stripe1 = createPart(
+				linesModel,
+				"Stripe",
+				Vector3.new(0.25, 0.08, 8),
+				CFrame.lookAt(pos, pos + forward),
+				Color3.fromRGB(240, 240, 240),
+				Enum.Material.Neon
+			)
+
+			local stripe2 = createPart(
+				linesModel,
+				"Stripe",
+				Vector3.new(0.25, 0.08, 8),
+				CFrame.lookAt(pos + right * (spacing * 0.45), pos + right * (spacing * 0.45) + forward),
+				Color3.fromRGB(240, 240, 240),
+				Enum.Material.Neon
+			)
+
+			stripe1.CanCollide = false
+			stripe2.CanCollide = false
+		end
+	end
+end
+
+local function createLamp(parent, position)
+	local model = createModel(parent, "LampPost")
+
+	local pole = createPart(
+		model,
+		"Pole",
+		Vector3.new(0.7, 10, 0.7),
+		CFrame.new(position + Vector3.new(0, 5, 0)),
+		Color3.fromRGB(70, 70, 75),
+		Enum.Material.Metal
+	)
+
+	local arm = createPart(
+		model,
+		"Arm",
+		Vector3.new(3, 0.35, 0.35),
+		CFrame.new(position + Vector3.new(1.2, 9.6, 0)),
+		Color3.fromRGB(70, 70, 75),
+		Enum.Material.Metal
+	)
+
+	local light = createPart(
+		model,
+		"Light",
+		Vector3.new(1.4, 0.2, 0.8),
+		CFrame.new(position + Vector3.new(2.3, 9.35, 0)),
+		Color3.fromRGB(255, 245, 170),
+		Enum.Material.Neon
+	)
+
+	pole.CanCollide = true
+	arm.CanCollide = true
+	light.CanCollide = false
+end
+
+local function createTree(parent, position)
+	local model = createModel(parent, "Tree")
+
+	createPart(
+		model,
+		"Trunk",
+		Vector3.new(1.2, 6, 1.2),
+		CFrame.new(position + Vector3.new(0, 3, 0)),
+		Color3.fromRGB(96, 66, 38),
+		Enum.Material.Wood
+	)
+
+	local crown = Instance.new("Part")
+	crown.Name = "Crown"
+	crown.Shape = Enum.PartType.Ball
+	crown.Anchored = true
+	crown.CanCollide = true
+	crown.Size = Vector3.new(6, 6, 6)
+	crown.CFrame = CFrame.new(position + Vector3.new(0, 7.5, 0))
+	crown.Color = Color3.fromRGB(64, 124, 64)
+	crown.Material = Enum.Material.Grass
+	crown.Parent = model
+end
+
+local function createBush(parent, position, sizeX, sizeZ)
+	local bush = createPart(
+		parent,
+		"Bush",
+		Vector3.new(sizeX, 2, sizeZ),
+		CFrame.new(position + Vector3.new(0, 1, 0)),
+		Color3.fromRGB(72, 125, 70),
+		Enum.Material.Grass
+	)
+	bush.Shape = Enum.PartType.Ball
+	return bush
+end
+
+local function createGuardBooth(parent, position, forward)
+	local model = createModel(parent, "GuardBooth")
+
+	local base = createPart(
+		model,
+		"Base",
+		Vector3.new(8, 0.6, 8),
+		CFrame.new(position + Vector3.new(0, 0.3, 0)),
+		Color3.fromRGB(145, 145, 145),
+		Enum.Material.Concrete
+	)
+
+	local booth = createPart(
+		model,
+		"Booth",
+		Vector3.new(6, 5, 6),
+		CFrame.lookAt(position + Vector3.new(0, 2.8, 0), position + Vector3.new(0, 2.8, 0) + forward),
+		Color3.fromRGB(210, 220, 230),
+		Enum.Material.SmoothPlastic
+	)
+
+	local roof = createPart(
+		model,
+		"Roof",
+		Vector3.new(7, 0.4, 7),
+		CFrame.lookAt(position + Vector3.new(0, 5.4, 0), position + Vector3.new(0, 5.4, 0) + forward),
+		Color3.fromRGB(55, 60, 70),
+		Enum.Material.Metal
+	)
+
+	base.CanCollide = true
+	booth.CanCollide = true
+	roof.CanCollide = true
+end
+
+local function createSidewalk(parent, a, b)
+	buildRectBetween(
+		parent,
+		"Sidewalk",
+		a,
+		b,
+		SIDEWALK_WIDTH,
+		0.5,
+		Color3.fromRGB(185, 185, 185),
+		Enum.Material.Concrete
+	)
+end
+
+local function createEnvironment(parent, parkingCenter, forward, right, width, length)
+	-- Lampy parkingowe
+	createLamp(parent, parkingCenter + right * (-width * 0.42) + forward * (-length * 0.38))
+	createLamp(parent, parkingCenter + right * ( width * 0.42) + forward * (-length * 0.38))
+	createLamp(parent, parkingCenter + right * (-width * 0.42) + forward * ( length * 0.38))
+	createLamp(parent, parkingCenter + right * ( width * 0.42) + forward * ( length * 0.38))
+
+	-- Drzewka
+	createTree(parent, parkingCenter + right * (-width * 0.60) + forward * (-length * 0.55))
+	createTree(parent, parkingCenter + right * ( width * 0.60) + forward * (-length * 0.55))
+	createTree(parent, parkingCenter + right * (-width * 0.60) + forward * ( length * 0.55))
+	createTree(parent, parkingCenter + right * ( width * 0.60) + forward * ( length * 0.55))
+
+	-- Krzaki
+	createBush(parent, parkingCenter + right * (-width * 0.52), 6, 3)
+	createBush(parent, parkingCenter + right * ( width * 0.52), 6, 3)
+end
+
+clearGenerated()
+local generated = makeFolder()
+
+local prisonCF, prisonSize = PRISON:GetBoundingBox()
+local prisonCenter = prisonCF.Position
+local gateCenter = findGateCenter()
+
+local _, nearestRoadPoint, nearestDistance = findNearestRoadPoint(gateCenter)
+if not nearestRoadPoint then
+	warn("[PrisonAccessFixed] Nie znaleziono drogi w CityBlockout.Roads")
+	return
+end
+
+local outward = flat(gateCenter - prisonCenter)
+if outward.Magnitude < 0.1 then
+	outward = flat(nearestRoadPoint - gateCenter)
+end
+if outward.Magnitude < 0.1 then
+	outward = Vector3.new(0, 0, -1)
+else
+	outward = outward.Unit
+end
+
+-- Jeśli skierowane "do środka", odwróć na miasto
+local toRoad = flat(nearestRoadPoint - gateCenter)
+if toRoad.Magnitude > 0.1 and outward:Dot(toRoad.Unit) < 0 then
+	outward = -outward
+end
+
+local right = Vector3.new(-outward.Z, 0, outward.X)
+
+-- DUŻY parking bezpośrednio przed bramą
+local parkingBackEdgeOffset = 16
+local parkingCenter =
+	Vector3.new(gateCenter.X, nearestRoadPoint.Y + 0.55, gateCenter.Z)
+	+ outward * (parkingBackEdgeOffset + PARKING_LENGTH * 0.5)
+
+local parking = createPart(
+	generated,
+	"VisitorParking",
+	Vector3.new(PARKING_WIDTH, 1, PARKING_LENGTH),
+	CFrame.lookAt(parkingCenter, parkingCenter + outward),
+	Color3.fromRGB(65, 67, 70),
+	Enum.Material.Asphalt
+)
+
+-- Chodnik od parkingu do bramy
+local walkwayStart = parkingCenter - outward * (PARKING_LENGTH * 0.5 - 8)
+local walkwayEnd = Vector3.new(gateCenter.X, parkingCenter.Y, gateCenter.Z) + outward * 2
+createSidewalk(generated, walkwayStart, walkwayEnd)
+
+-- Budka ochrony
+local boothPos = parkingCenter + right * (PARKING_WIDTH * 0.34) - outward * (PARKING_LENGTH * 0.22)
+createGuardBooth(generated, boothPos, outward)
+
+-- Linie parkingowe
+createParkingLines(generated, parkingCenter, outward, right, PARKING_WIDTH, PARKING_LENGTH)
+
+-- Droga dojazdowa z miasta do parkingu
+local roadEntry = parkingCenter - outward * (PARKING_LENGTH * 0.5 + 8)
+roadEntry = Vector3.new(roadEntry.X, nearestRoadPoint.Y + 0.5, roadEntry.Z)
+
+buildAxisRoad(generated, nearestRoadPoint + Vector3.new(0, 0.1, 0), roadEntry + Vector3.new(0, 0.1, 0), "AccessRoad")
+
+-- Mały plac łączący drogę z parkingiem
+createPart(
+	generated,
+	"ParkingConnector",
+	Vector3.new(ROAD_WIDTH + 4, 1, 16),
+	CFrame.lookAt(roadEntry + outward * 8, roadEntry + outward * 20),
+	Color3.fromRGB(65, 67, 70),
+	Enum.Material.Asphalt
+)
+
+-- Lampy i zieleń
+createEnvironment(generated, parkingCenter, outward, right, PARKING_WIDTH, PARKING_LENGTH)
+
+log("Więzienie naprawione.")
+log("Gate center:", gateCenter)
+log("Nearest road point:", nearestRoadPoint)
+log("Distance to city road:", math.floor(nearestDistance + 0.5), "studs")
+log("Parking:", PARKING_WIDTH .. "x" .. PARKING_LENGTH)
+log("Wygenerowano folder:", GENERATED_NAME)
