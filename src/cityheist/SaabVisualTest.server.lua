@@ -4,6 +4,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local Fix = require(script.Parent:WaitForChild("SaabVisualFix"))
 local Placement = require(script.Parent:WaitForChild("GroundPlacement"))
+local Wheels = require(script.Parent:WaitForChild("SaabWheelAnimator"))
 
 local source = ServerStorage:WaitForChild("CityHeistVehicles"):WaitForChild("Saab_9_3_Turbo_X_Driveable")
 local name = "CityHeist_SaabVisualTest"
@@ -33,5 +34,6 @@ end
 
 Placement.place(car, hit.Position, 0.3)
 car.Parent = Workspace
+Wheels.attach(car)
 print(("[SaabVisualTest] Gotowe: %s | przesunieto %d czesci | usunieto %d spawow | delta=%.3f"):format(name, count, removed, delta))
 print("[SaabVisualTest] Wsiadz do testowego Saaba i sprawdz wyglad oraz jazde. Zmiany nie zapisuja sie po Stop.")
