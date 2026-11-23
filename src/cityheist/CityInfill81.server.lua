@@ -5,13 +5,13 @@ local RS=game:GetService("RunService")
 if not RS:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-print("[CityInfill84] START: script launched in Studio")
-if W:GetAttribute("CityInfill84Running") then
-    print("[CityInfill84] DUPLICATE: already running; skipping")
+print("[CityInfill85] START: script launched in Studio")
+if W:GetAttribute("CityInfill85Running") then
+    print("[CityInfill85] DUPLICATE: already running; skipping")
     return
 end
-W:SetAttribute("CityInfill84Running",true)
-print("[CityInfill84] Waiting for map, original buildings and asset kit")
+W:SetAttribute("CityInfill85Running",true)
+print("[CityInfill85] Waiting for map, original buildings and asset kit")
 
 -- Poll all dependencies together so a missing one cannot silently
 -- stall for several sequential 30/45/90/105-second timeouts.
@@ -29,7 +29,7 @@ for attempt=1,50 do
         and existing:GetAttribute("PlacementComplete")==true
     if ready then break end
     if attempt==1 or attempt%5==0 then
-        print(string.format("[CityInfill84] WAIT %ds | roads=%s ground=%s original=%s placed=%s import=%s kit=%s prefabFolder=%s",
+        print(string.format("[CityInfill85] WAIT %ds | roads=%s ground=%s original=%s placed=%s import=%s kit=%s prefabFolder=%s",
             attempt-1,tostring(roads~=nil),tostring(ground~=nil),
             tostring(existing~=nil),
             tostring(existing and existing:GetAttribute("PlacementComplete")),
@@ -39,45 +39,61 @@ for attempt=1,50 do
     task.wait(1)
 end
 if not ready then
-    warn("[CityInfill84] Missing readiness after 50s, skipping only optional infill")
+    warn("[CityInfill85] Missing readiness after 50s, skipping only optional infill")
     return
 end
-print("[CityInfill84] READY: all source assets and main buildings loaded")
+print("[CityInfill85] READY: all source assets and main buildings loaded")
 
-print("[CityInfill84] Inputs ready; scanning prefab catalog")
+print("[CityInfill85] Inputs ready; scanning prefab catalog")
 local candidates={}
+local function register(m)
+    if not m:IsA("Model") then return end
+    local count=0
+    for _,obj in ipairs(m:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            count+=1
+            if count>800 then return end
+        end
+    end
+    if count<8 then return end
+    local ok,box,size=pcall(function()return m:GetBoundingBox()end)
+    if not ok or not size then return end
+    if size.X<9 or size.Z<9 or size.Y<8
+        or size.X>105 or size.Z>105 or size.Y>150 then return end
+    table.insert(candidates,{model=m,size=size,height=size.Y,count=count})
+end
+-- Mirror the proven primary builder: try nested individual models first.
 local scanned=0
 for _,m in ipairs(source:GetDescendants()) do
     scanned+=1
     if scanned%250==0 then task.wait() end
     if m:IsA("Model") then
-        local count=0
         local nested=0
         for _,obj in ipairs(m:GetDescendants()) do
-            if obj:IsA("BasePart") then count+=1
-            elseif obj:IsA("Model") then nested+=1 end
+            if obj:IsA("Model") then nested+=1 end
+            if nested>6 then break end
         end
-        if count>=8 and count<=800 and nested<=6 then
-            local ok,box,size=pcall(function()return m:GetBoundingBox()end)
-            if ok and size and size.X>=9 and size.Z>=9
-                and size.X<=105 and size.Z<=105
-                and size.Y>=8 and size.Y<=150 then
-                table.insert(candidates,{model=m,size=size,height=size.Y,count=count})
-            end
-        end
+        if nested<=6 then register(m) end
     end
 end
+local selection="nested"
+if #candidates==0 then
+    selection="root fallback"
+    print("[CityInfill85] No nested complete prefabs; trying kit root models, as in CityPrefab79")
+    for _,m in ipairs(source:GetChildren()) do register(m) end
+end
+print(string.format("[CityInfill85] Selection=%s | usable=%d",selection,#candidates))
 -- Match the dimensions already proven by the main city builder and then
 -- sort by height; the first models are the shortest *available* buildings.
 table.sort(candidates,function(a,b)
     if a.height==b.height then return a.model.Name<b.model.Name end
     return a.height<b.height
 end)
-print(string.format("[CityInfill84] %d usable candidates; height range %.0f..%.0f",
+print(string.format("[CityInfill85] %d usable candidates; height range %.0f..%.0f",
     #candidates,#candidates>0 and candidates[1].height or 0,
     #candidates>0 and candidates[#candidates].height or 0))
 if #candidates==0 then
-    warn("[CityInfill84] No complete prefab buildings match proven city generator criteria; no buildings added")
+    warn("[CityInfill85] No complete prefab buildings match proven city generator criteria; no buildings added")
     return
 end
 
@@ -102,7 +118,7 @@ for _,p in ipairs(roads:GetDescendants()) do
         end
     end
 end
-if #roadParts<4 then warn("[CityInfill84] No valid road grid");result:Destroy();return end
+if #roadParts<4 then warn("[CityInfill85] No valid road grid");result:Destroy();return end
 local blocked={roads,existing,result}
 for _,key in ipairs({"GameplayLocations","CityLocations","Downtown","CityGarages","CityDecorativeHomes"}) do
     local folder=city:FindFirstChild(key)
@@ -146,7 +162,7 @@ table.sort(points,function(a,b)
     return a.score<b.score
 end)
 
-print(string.format("[CityInfill84] Found %d roads, %d candidate plots; checking free sites",#roadParts,#points))
+print(string.format("[CityInfill85] Found %d roads, %d candidate plots; checking free sites",#roadParts,#points))
 local count=0
 local MAX=8
 local attempts=math.min(#candidates,18)
@@ -179,7 +195,7 @@ for _,pt in ipairs(points) do
                 local bottom=box.Position.Y-actual.Y/2
                 model:PivotTo(model:GetPivot()+Vector3.new(0,y-bottom+.1,0))
                 count+=1
-                print(string.format("[CityInfill84] PLACED %02d %s | %.0fx%.0fx%.0f | X %.0f Z %.0f",
+                print(string.format("[CityInfill85] PLACED %02d %s | %.0fx%.0fx%.0f | X %.0f Z %.0f",
                     count,entry.model.Name,sz.X,sz.Y,sz.Z,pt.x,pt.z))
                 break
             end
@@ -189,5 +205,5 @@ end
 result:SetAttribute("PlacementComplete",true)
 result:SetAttribute("BuildingCount",count)
 print(string.format(
-    "[CityInfill84] DONE: %d extra prefabs selected shortest-first, %d eligible prefabs; original 20 and city roads unchanged",
+    "[CityInfill85] DONE: %d extra prefabs selected shortest-first, %d eligible prefabs; original 20 and city roads unchanged",
     count,#candidates))
