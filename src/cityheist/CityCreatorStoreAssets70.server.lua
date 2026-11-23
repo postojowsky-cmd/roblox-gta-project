@@ -24,11 +24,13 @@ stage.Name="CityHeistAssetStaging"
 stage:SetAttribute("SafePreviewOnly",true)
 stage:SetAttribute("CreatorStoreAssetId",id)
 stage.Parent=ServerStorage
+stage:SetAttribute("ImportStatus","Loading")
 
 local ok,asset=pcall(function()
     return AssetService:LoadAssetAsync(id)
 end)
 if not ok or typeof(asset)~="Instance" then
+    stage:SetAttribute("ImportStatus","Failed")
     warn("[CityAssets71] Model import blocked: "..tostring(asset))
     return
 end
@@ -44,6 +46,7 @@ asset.Name="ModernCityModularKit"
 asset:SetAttribute("CreatorStoreAssetId",id)
 asset:SetAttribute("ForeignScriptsRemoved",stripped)
 asset.Parent=stage
+stage:SetAttribute("ImportStatus","Ready")
 
 local parts,meshes,models=0,0,0
 for _,obj in ipairs(asset:GetDescendants()) do
