@@ -1,5 +1,17 @@
 # Roblox City Heist: Drive & Escape
 
+## Aktualny stan — 23.11.2026
+
+**Sesja zakończona.** W Roblox Studio potwierdzono wygenerowanie **28 dodatkowych budynków (20 + 8)**, **65 dekoracji** (23 drzewa, 28 latarni, 14 ławek), **2 parkingów**, **1 stacji benzynowej** oraz **3 oznaczonych dojazdów**. Saab został przetestowany przy stacji. Oryginalne drogi i istniejące mechaniki pozostały bez zmian.
+
+**Pełny dziennik zmian, nazwy skryptów, checklistę zabezpieczenia pracy i plan kroku 90:** [docs/SESSION_2026-11-23.md](docs/SESSION_2026-11-23.md).
+
+> **Ważne:** ta rozbudowa na razie działa w trybie testowym **Roblox Studio / Play**. Skrypty używają `RunService:IsStudio()`, a modele powstają dynamicznie. Nie oznacza to, że nowe obiekty zostaną automatycznie trwale zapisane w `.rbxl` lub pojawią się w opublikowanej grze. Przed wydaniem potrzebne jest zapisanie/bake mapy albo przygotowanie bezpiecznego trybu produkcyjnego i weryfikacja uprawnień do assetów.
+
+**Po zakończeniu sesji:** sprawdź `git status`, pobierz najnowsze zmiany `git pull` na gałęzi `feature/saab-ground-placement`, zachowaj kopię miejsca Roblox Studio, a następną sesję zacznij od kontroli dojazdów i decyzji o trwałym zapisie mapy.
+
+---
+
 ## Aktualny stan projektu — 16.11.2026
 
 **Status: grywalny prototyp w Roblox Studio; dalszy rozwoj w toku.** Ponizsze funkcje zostaly zbudowane i przetestowane w lokalnym pliku `Game.rbxl`.
