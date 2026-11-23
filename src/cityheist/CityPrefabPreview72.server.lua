@@ -5,19 +5,32 @@ local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
-if W:GetAttribute("CityPrefab74Running") then return end
-W:SetAttribute("CityPrefab74Running",true)
+if W:GetAttribute("CityPrefab75Running") then return end
+W:SetAttribute("CityPrefab75Running",true)
 
-local city=W:WaitForChild("CityBlockout",25)
-local stage=SS:WaitForChild("CityHeistAssetStaging",30)
-local kit=stage and stage:FindFirstChild("ModernCityModularKit")
-local prefabs=kit and kit:FindFirstChild("PrefabBuildings",true)
-local roads=city and city:FindFirstChild("Roads")
-local ground=city and city:FindFirstChild("Ground")
-if not (prefabs and roads and ground) then
-    warn("[CityPrefab74] Required imported kit or map geometry not available")
+local city=W:WaitForChild("CityBlockout",30)
+local stage=SS:WaitForChild("CityHeistAssetStaging",45)
+local roads=city and city:WaitForChild("Roads",30)
+local ground=city and city:WaitForChild("Ground",30)
+if not (stage and roads and ground) then
+    warn(string.format("[CityPrefab75] Missing map dependency: stage=%s roads=%s ground=%s",
+        tostring(stage~=nil),tostring(roads~=nil),tostring(ground~=nil)))
     return
 end
+-- The importer creates the staging folder BEFORE LoadAssetAsync finishes.
+-- Wait for the actual populated kit, not just the empty staging folder.
+local kit=stage:WaitForChild("ModernCityModularKit",90)
+if not kit then
+    warn("[CityPrefab75] Import did not finish. status="..
+        tostring(stage:GetAttribute("ImportStatus")))
+    return
+end
+local prefabs=kit:FindFirstChild("PrefabBuildings",true)
+if not prefabs then
+    warn("[CityPrefab75] Imported kit has no PrefabBuildings folder")
+    return
+end
+print("[CityPrefab75] Imported prefabs ready; building on existing city grid")
 -- Layout scripts create the map during server startup.
 task.wait(8)
 
@@ -55,7 +68,7 @@ table.sort(candidates,function(a,b)
     if a.count==b.count then return a.model.Name<b.model.Name end
     return a.count>b.count
 end)
-if #candidates==0 then warn("[CityPrefab74] No usable prefab models");return end
+if #candidates==0 then warn("[CityPrefab75] No usable prefab models");return end
 
 local roadParts={}
 local minX,maxX,minZ,maxZ=math.huge,-math.huge,math.huge,-math.huge
