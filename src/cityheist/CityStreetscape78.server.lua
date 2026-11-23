@@ -7,25 +7,30 @@ local city = Workspace:WaitForChild("CityBlockout",30)
 if not city then return end
 
 -- Non-yielding guard: some old Studio copies coexist with Rojo scripts.
-if Workspace:GetAttribute("CityStreetscape78Running") then return end
+if Workspace:GetAttribute("CityStreetscape79Running") then return end
 Workspace:SetAttribute("CityStreetscape78Running",true)
 
 local roads = city:WaitForChild("Roads",30)
 local ground = city:WaitForChild("Ground",30)
 local prefabs = Workspace:WaitForChild("CityHeistPrefabCity74",105)
 if not (roads and ground and prefabs) then
-    warn("[CityStreetscape78] Map or new prefab folder not available; skipped")
+    warn("[CityStreetscape79] Map or new prefab folder not available; skipped")
     return
 end
 
--- Prefab folder is created before its 12 models finish placing.
+-- The prefab folder appears before construction is finished.
+-- Wait for the builder's explicit completion signal (not a fixed count).
 local waited = 0
-while #prefabs:GetChildren() < 12 and waited < 18 do
+while not prefabs:GetAttribute("PlacementComplete") and waited < 45 do
     task.wait(.5)
     waited += .5
 end
+if not prefabs:GetAttribute("PlacementComplete") then
+    warn("[CityStreetscape79] Buildings have not finished placing; skipping decoration to avoid partial layout")
+    return
+end
 
-local old=Workspace:FindFirstChild("CityHeistStreetscape78")
+local old=Workspace:FindFirstChild("CityHeistStreetscape79")
 if old then old:Destroy() end
 local folder=Instance.new("Folder")
 folder.Name="CityHeistStreetscape78"
@@ -162,11 +167,11 @@ for index,model in ipairs(buildings) do
         local cx,cz,typ,r,h=item[1],item[2],item[3],item[4],item[5]
         local gy=floorAt(cx,cz)
         if gy and not hasBlockingObject(cx,gy,cz,r,h) then
-            if typ=="tree" and placed.tree<14 then
+            if typ=="tree" and placed.tree<24 then
                 tree(cx,gy,cz);placed.tree+=1
-            elseif typ=="lamp" and placed.lamp<16 then
+            elseif typ=="lamp" and placed.lamp<28 then
                 lamp(cx,gy,cz);placed.lamp+=1
-            elseif typ=="bench" and placed.bench<8 then
+            elseif typ=="bench" and placed.bench<14 then
                 bench(cx,gy,cz);placed.bench+=1
             end
         end
