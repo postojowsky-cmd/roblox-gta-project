@@ -65,6 +65,18 @@ function Builder.build(shop,index)
     make(room,"GlassDoorOpen",Vector3.new(5,12,0.25),
         at(6,6,-27)*CFrame.Angles(0,math.rad(80),0),
         Color3.fromRGB(150,215,235),Enum.Material.Glass,false,0.6)
+    -- Entrance: double open glass leaves, door hardware and threshold.
+    make(room,"EntranceThreshold",Vector3.new(12,0.18,3),at(0,0.13,-29),
+        Color3.fromRGB(105,110,115),Enum.Material.Metal)
+    make(room,"EntranceTopFrame",Vector3.new(13,0.4,0.8),at(0,13.8,-30.3),trim)
+    for _,x in ipairs({-6,6}) do
+        make(room,"EntranceSideFrame",Vector3.new(0.4,14,0.8),at(x,7,-30.3),trim)
+    end
+    make(room,"DoorLeafLeft",Vector3.new(5,12,0.2),
+        at(-6.5,6,-27)*CFrame.Angles(0,math.rad(-75),0),
+        Color3.fromRGB(158,221,235),Enum.Material.Glass,false,0.5)
+    make(room,"DoorHandleLeft",Vector3.new(0.25,1.6,0.25),
+        at(-4.8,6,-27.2),Color3.fromRGB(200,205,210),Enum.Material.Metal,false)
     -- Interior tile on top of existing foundation.
     make(room,"TileFloor",Vector3.new(62,0.15,58),at(0,0.075,0),
         Color3.fromRGB(101,111,118),Enum.Material.Slate)
@@ -117,19 +129,52 @@ function Builder.build(shop,index)
             Color3.fromRGB(145,211,231),Enum.Material.Glass,false,0.5)
     end
     -- Stockroom across the rear, with a physical opening at x=16.
-    make(room,"StockroomPartitionLeft",Vector3.new(44,15,0.6),
-        at(-10,7.5,20),wall)
-    make(room,"StockroomPartitionRight",Vector3.new(9,15,0.6),
-        at(27.5,7.5,20),wall)
-    make(room,"StockroomDoorHeader",Vector3.new(12,8,0.6),
-        at(17,19,20),wall)
-    textSign(room,"StockroomSign","ZAPLECZE",at(17,13,19.5),Vector3.new(10,2,0.2))
-    for _,x in ipairs({-23,-10,3}) do
-        make(room,"StorageRack",Vector3.new(8,4,3),at(x,2.2,25),
-            Color3.fromRGB(112,90,65),Enum.Material.Wood)
-        make(room,"StorageBoxes",Vector3.new(4,3,2),at(x,5.7,25),
-            Color3.fromRGB(167,126,75),Enum.Material.Wood)
+    make(room,"StockroomPartitionLeft",Vector3.new(44,23,0.6),
+        at(-10,11.5,20),wall)
+    make(room,"StockroomPartitionRight",Vector3.new(9,23,0.6),
+        at(27.5,11.5,20),wall)
+    -- 12-stud-wide walk-through opening at x=17, with full-height header.
+    make(room,"StockroomDoorHeader",Vector3.new(12,12,0.6),
+        at(17,17,20),wall)
+    for _,x in ipairs({11,23}) do
+        make(room,"StockroomDoorFrame",Vector3.new(0.4,11,0.9),
+            at(x,5.5,19.7),trim)
     end
+    textSign(room,"StockroomSign","ZAPLECZE",at(17,12.5,19.5),Vector3.new(10,2,0.2))
+    -- Backroom storage shelves with two levels of stock.
+    for _,x in ipairs({-24,-13}) do
+        for _,y in ipairs({2,5}) do
+            make(room,"StorageRack",Vector3.new(8,0.45,3),
+                at(x,y,25),Color3.fromRGB(112,90,65),Enum.Material.Wood)
+            for k=1,3 do
+                make(room,"StorageBox",Vector3.new(1.8,1.7,2),
+                    at(x-3+k*2,y+1,25),
+                    Color3.fromRGB(150+k*8,115+k*6,70),Enum.Material.Wood)
+            end
+        end
+    end
+    -- Manager's desk and an open laptop.
+    make(room,"OfficeDesk",Vector3.new(9,0.55,3.2),
+        at(5,3.3,25),Color3.fromRGB(106,74,53),Enum.Material.Wood)
+    for _,x in ipairs({1.3,8.7}) do
+        make(room,"DeskLeg",Vector3.new(0.6,3,0.6),
+            at(x,1.5,25),Color3.fromRGB(56,61,68),Enum.Material.Metal)
+    end
+    make(room,"LaptopBase",Vector3.new(2.8,0.18,1.9),
+        at(5,3.75,25),Color3.fromRGB(36,42,49),Enum.Material.Metal)
+    local screen=make(room,"LaptopScreen",Vector3.new(2.8,1.9,0.15),
+        at(5,4.8,25.9)*CFrame.Angles(math.rad(-12),0,0),
+        Color3.fromRGB(25,31,38),Enum.Material.Metal)
+    local display=Instance.new("SurfaceGui")
+    display.Face=Enum.NormalId.Front;display.Parent=screen
+    local text=Instance.new("TextLabel")
+    text.Size=UDim2.fromScale(1,1);text.BackgroundColor3=Color3.fromRGB(20,49,62)
+    text.TextColor3=Color3.fromRGB(95,235,198)
+    text.Text="STOCK MANAGER";text.TextScaled=true;text.Font=Enum.Font.Code;text.Parent=display
+    make(room,"OfficeChair",Vector3.new(3,0.6,3),at(5,1.6,21.7),
+        Color3.fromRGB(42,47,55))
+    make(room,"OfficeChairBack",Vector3.new(3,3,0.5),at(5,3,20.3),
+        Color3.fromRGB(42,47,55))
     local safe=make(room,"FutureRobberySafe",Vector3.new(3,4,3),
         at(26,2,25),Color3.fromRGB(68,76,83),Enum.Material.Metal)
     safe:SetAttribute("FutureShopRobbery",true)
