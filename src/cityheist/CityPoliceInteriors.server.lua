@@ -67,7 +67,7 @@ local function build(model,index)
     local metal=Color3.fromRGB(55,66,77)
     local hw=width/2
     local hd=depth/2
-    local doorWidth=math.clamp(entrance.Size.X,7,11)
+    local doorWidth=math.clamp(math.max(entrance.Size.X,entrance.Size.Z),7,11)
     local doorHalf=doorWidth/2+1
     local height=math.clamp(body.Size.Y,17,25)
     -- Only now replace the known solid placeholder, keeping original model parts.
@@ -99,7 +99,7 @@ local function build(model,index)
     local partitionZ=math.min(6,depth*.16)
     local wallSpan=hw-6
     for _,s in ipairs({-1,1}) do
-        part(interior,"InteriorPartition",Vector3.new(wallSpan,.75 and height-1 or height,.6),
+        part(interior,"InteriorPartition",Vector3.new(wallSpan,height-1,.6),
             at(s*(6+wallSpan/2),(height-1)/2,partitionZ),wall)
     end
     part(interior,"RearDoorHeader",Vector3.new(12,height-11,.6),
