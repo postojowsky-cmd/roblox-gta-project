@@ -110,11 +110,15 @@ local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.FilterDescendantsInstances = {folder}
 rayParams.IgnoreWater = true
-local function groundAt(pos)
+local function surfaceAt(pos)
     local startY = math.max(350,gate.Y + 170)
     local ray = W:Raycast(Vector3.new(pos.X,startY,pos.Z), Vector3.new(0,-1200,0),rayParams)
-    if ray and ray.Normal.Y > 0.65 then return ray.Position.Y end
+    if ray and ray.Normal.Y > 0.65 then return ray end
     return nil
+end
+local function groundAt(pos)
+    local ray=surfaceAt(pos)
+    return ray and ray.Position.Y or nil
 end
 
 local targets = {}
@@ -168,15 +172,16 @@ local function overlapsRoad(cf,size)
     return false
 end
 
-local WIDTH,DEPTH = 96,78
+local WIDTH,DEPTH = 140,112
 local chosen,chosenScore
 for _,side in ipairs({-1,1}) do
-    for _,distance in ipairs({105,135,165,195,225,260,300}) do
-        for _,ahead in ipairs({5,22,-15}) do
+    for _,distance in ipairs({140,170,195,220,260,300}) do
+        for _,ahead in ipairs({-5,15,35}) do
             -- This is intentionally HORIZONTAL/LATERAL to the prison gate.
             -- Both candidate sides are outside the prison, never in its courtyard.
             local rawCenter = gate + across * (side * distance) + outward * ahead
-            local floor = groundAt(rawCenter)
+            local surface = surfaceAt(rawCenter)
+            local floor = surface and surface.Position.Y
             if floor then
                 local center = Vector3.new(rawCenter.X,floor + 0.42,rawCenter.Z)
                 local cf = CFrame.lookAt(center,center + outward)
@@ -197,7 +202,18 @@ for _,side in ipairs({-1,1}) do
                 end
                 if stable and not blockedByBuildings(cf,size) and not overlapsRoad(cf,size) then
                     local cityRoad,roadDist = closestCityRoad(center)
-                    local score=distance*2.5 + roadDist*0.45 + math.abs(ahead)*0.4
+                    -- The marked destination is the wide GREY paved apron BESIDE the prison.
+                    -- Heavily penalize green grass so we do not pick the crossed-out
+                    -- parking across the street again.
+                    local part=surface.Instance
+                    local col=part.Color
+                    local grey=math.abs(col.R-col.G)<0.10 and math.abs(col.G-col.B)<0.10
+                    local grass=(surface.Material==Enum.Material.Grass or
+                        col.G>col.R*1.16 and col.G>col.B*1.10)
+                    local apronBonus=(grey and -2500 or 0)
+                    local grassPenalty=(grass and 5000 or 0)
+                    local score=distance*1.8 + roadDist*0.15 + math.abs(ahead)*0.4
+                        + apronBonus + grassPenalty
                     if not chosen or score < chosenScore then
                         chosen={cf=cf,ground=floor,side=side,offset=distance,roadPoint=cityRoad}
                         chosenScore=score
@@ -222,20 +238,20 @@ create("ParkingBesidePrison",Vector3.new(WIDTH,0.75,DEPTH),
     lotCF,asphalt,Enum.Material.Asphalt,true)
 
 -- Clear two parking rows with a wide center aisle.
-for _,z in ipairs({-25,25}) do
+for _,z in ipairs({-35,35}) do
     for i=0,8 do
-        local x=-43 + i*10.75
-        create("ParkingBayLine",Vector3.new(0.24,0.06,18.5),
+        local x=-62 + i*15.5
+        create("ParkingBayLine",Vector3.new(0.24,0.06,24),
             lotCF*CFrame.new(x,0.41,z),white,nil,false)
     end
-    create("ParkingRowEnd",Vector3.new(86,0.06,0.25),
-        lotCF*CFrame.new(0,0.41,z+(z < 0 and -9.25 or 9.25)),white,nil,false)
+    create("ParkingRowEnd",Vector3.new(124,0.06,0.25),
+        lotCF*CFrame.new(0,0.41,z+(z < 0 and -12 or 12)),white,nil,false)
 end
 for _,x in ipairs({-WIDTH/2+2,WIDTH/2-2}) do
     create("ParkingSideCurb",Vector3.new(1.2,0.5,DEPTH),
         lotCF*CFrame.new(x,0.38,0),concrete,Enum.Material.Concrete,true)
 end
-for z=-23,25,18 do
+for z=-33,35,22 do
     create("CenterLaneMarking",Vector3.new(0.28,0.06,8),
         lotCF*CFrame.new(0,0.42,z),yellow,nil,false)
 end
@@ -298,7 +314,7 @@ if route then
             local py=groundAt(p) or floor
             local qy=groundAt(q) or floor
             roadway("CityPrisonAccessRoad",Vector3.new(p.X,py+0.5,p.Z),
-                Vector3.new(q.X,qy+0.5,q.Z),22,asphalt)
+                Vector3.new(q.X,qy+0.5,q.Z),26,asphalt)
         end
     end
     print("[Prison62] Parking connected to city road")
@@ -352,7 +368,7 @@ local function lamp(localX,localZ)
     light.Range=34;light.Brightness=2;light.Parent=head
 end
 for _,x in ipairs({-WIDTH/2-2,WIDTH/2+2}) do
-    lamp(x,-28)
-    lamp(x,28)
+    lamp(x,-43)
+    lamp(x,43)
 end
-print("[Prison63] Side parking retained; diagonal bridge removed; prison walls unchanged.")
+print("[Prison64] Side apron location prioritizes GREY land beside prison, not crossed-out grass parking.")
