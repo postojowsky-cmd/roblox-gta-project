@@ -5,15 +5,17 @@ local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
 local Workspace=game:GetService("Workspace")
 local ServerStorage=game:GetService("ServerStorage")
-if Workspace:GetAttribute("CityPrefab72Running") then return end
-Workspace:SetAttribute("CityPrefab72Running",true)
+if Workspace:GetAttribute("CityPrefab73Running") then return end
+Workspace:SetAttribute("CityPrefab73Running",true)
 
 -- Existing road grid occupies approximately X -364..1136, Z -773..727.
 -- Keep the preview outside it, away from the prison (east of city).
-local SITE=Vector3.new(320,2,1190)
-local MAX_BUILDINGS=3
+local SITE=Vector3.new(320,2,1380)
+local MAX_BUILDINGS=12
 local MAX_PARTS_PER_BUILDING=850
-
+local COLUMNS=4
+local ROWS=3
+local BLOCK=140
 local stage=ServerStorage:WaitForChild("CityHeistAssetStaging",30)
 if not stage then warn("[CityPrefab72] Asset staging missing");return end
 local kit=stage:WaitForChild("ModernCityModularKit",30)
@@ -90,56 +92,80 @@ if #candidates==0 then
 end
 
 local roadColor=Color3.fromRGB(49,54,61)
-local walkColor=Color3.fromRGB(170,175,176)
--- A small connected street with proper sidewalks and foundations.
-basePart("MainStreet",Vector3.new(375,1,29),CFrame.new(SITE.X,SITE.Y-0.5,SITE.Z),
-    roadColor,Enum.Material.Asphalt)
-for _,side in ipairs({-1,1}) do
-    basePart("Sidewalk",Vector3.new(375,0.7,8),
-        CFrame.new(SITE.X,SITE.Y-0.35,SITE.Z+side*19),
-        walkColor,Enum.Material.Concrete)
+local walkColor=Color3.fromRGB(169,176,181)
+local vergeColor=Color3.fromRGB(118,141,125)
+local white=Color3.fromRGB(233,235,227)
+local yellow=Color3.fromRGB(239,205,93)
+local minX=SITE.X-COLUMNS*BLOCK/2
+local minZ=SITE.Z-ROWS*BLOCK/2
+local totalW=COLUMNS*BLOCK
+local totalD=ROWS*BLOCK
+
+-- Continuous orthogonal network: roads are centered on block BOUNDARIES,
+-- so prefab parcels sit in the centers and don't overlap traffic lanes.
+for j=0,ROWS do
+    local z=minZ+j*BLOCK
+    basePart("EastWestRoad_"..j,Vector3.new(totalW+30,.7,25),
+        CFrame.new(SITE.X,SITE.Y-.34,z),roadColor,Enum.Material.Asphalt)
+    for _,side in ipairs({-1,1}) do
+        basePart("EastWestPavement_"..j,Vector3.new(totalW+30,.35,5),
+            CFrame.new(SITE.X,SITE.Y-.13,z+side*15.3),walkColor,Enum.Material.Concrete)
+    end
+    for x=minX+14,minX+totalW-12,26 do
+        basePart("RoadDashEW",Vector3.new(11,.04,.36),
+            CFrame.new(x,SITE.Y+.06,z),yellow,nil,false)
+    end
 end
-for x=-170,170,20 do
-    basePart("LaneMarking",Vector3.new(10,0.06,0.4),
-        CFrame.new(SITE.X+x,SITE.Y+0.06,SITE.Z),
-        Color3.fromRGB(245,207,80),nil,false)
+for i=0,COLUMNS do
+    local x=minX+i*BLOCK
+    basePart("NorthSouthRoad_"..i,Vector3.new(25,.7,totalD+30),
+        CFrame.new(x,SITE.Y-.34,SITE.Z),roadColor,Enum.Material.Asphalt)
+    for _,side in ipairs({-1,1}) do
+        basePart("NorthSouthPavement_"..i,Vector3.new(5,.35,totalD+30),
+            CFrame.new(x+side*15.3,SITE.Y-.13,SITE.Z),walkColor,Enum.Material.Concrete)
+    end
+    for z=minZ+14,minZ+totalD-12,26 do
+        basePart("RoadDashNS",Vector3.new(.36,.04,11),
+            CFrame.new(x,SITE.Y+.06,z),yellow,nil,false)
+    end
 end
 
 local used=0
-local seen={}
-for _,entry in ipairs(candidates) do
-    if used>=MAX_BUILDINGS then break end
-    -- avoid three near-identical copies of the same prefab name
-    if not seen[entry.model.Name] then
-        seen[entry.model.Name]=true
+local candidateCount=#candidates
+-- Reuse distinct genuine prefabs when the catalog has fewer than 12 choices.
+-- Layout is deterministic and cells are nonoverlapping.
+for row=1,ROWS do
+    for col=1,COLUMNS do
+        local ordinal=(row-1)*COLUMNS+col
+        local entry=candidates[((ordinal-1)%candidateCount)+1]
+        local x=minX+(col-.5)*BLOCK
+        local z=minZ+(row-.5)*BLOCK
         local clone=entry.model:Clone()
-        -- double protection: regardless of staging, never run foreign scripts.
         for _,node in ipairs(clone:GetDescendants()) do
             if node:IsA("LuaSourceContainer") then node:Destroy()
             elseif node:IsA("BasePart") then node.Anchored=true end
         end
-        clone.Name="Prefab_"..(used+1).."_"..entry.model.Name
+        clone.Name=string.format("Building_%02d_%s",ordinal,entry.model.Name)
         clone.Parent=preview
-        local ok,box,size=pcall(function()return clone:GetBoundingBox()end)
-        if not ok or not size then
-            clone:Destroy()
-        else
-            local x=SITE.X+(used-1)*117
-            local z=SITE.Z-60
-            local originalPivot=clone:GetPivot()
-            local rotation=originalPivot.Rotation
-            local offsetFromBottom=originalPivot.Position.Y-(box.Position.Y-size.Y/2)
-            local target=CFrame.new(x,SITE.Y+offsetFromBottom,z)*rotation
-            clone:PivotTo(target)
-            -- Safe single-lot slab below the prefab building.
-            basePart("BuildingParcel",Vector3.new(108,0.6,98),
-                CFrame.new(x,SITE.Y-0.3,z),Color3.fromRGB(113,128,121),
-                Enum.Material.Concrete)
+        local ok,box,size=pcall(function() return clone:GetBoundingBox() end)
+        if ok and size then
+            local pivot=clone:GetPivot()
+            local offset=pivot.Position.Y-(box.Position.Y-size.Y/2)
+            -- Rotate full prefabs by 180 on alternate rows, without modifying
+            -- their interior structure or scaling/distorting mesh geometry.
+            local rotate=(row%2==0) and CFrame.Angles(0,math.pi,0) or CFrame.new()
+            clone:PivotTo(CFrame.new(x,SITE.Y+offset,z)*rotate*pivot.Rotation)
+            basePart("BuildingParcel_"..ordinal,Vector3.new(112,.5,111),
+                CFrame.new(x,SITE.Y-.3,z),vergeColor,Enum.Material.Concrete)
             used+=1
-            print(string.format("[CityPrefab72] PLACED %s | %d parts",clone.Name,entry.parts))
+            print(string.format("[CityPrefab73] PLACED %02d | %s | %d parts",
+                ordinal,entry.model.Name,entry.parts))
+        else
+            clone:Destroy()
+            warn("[CityPrefab73] Could not bound prefab: "..entry.model.Name)
         end
     end
 end
 print(string.format(
-    "[CityPrefab72] Preview built: %d authentic prefab buildings, site X=%.0f Z=%.0f. Existing city untouched.",
-    used,SITE.X,SITE.Z))
+    "[CityPrefab73] 4x3 district: %d prefab buildings; %d available distinct prefabs; crossroads and sidewalks generated. Preview near X=%.0f, Z=%.0f. Live city unchanged.",
+    used,candidateCount,SITE.X,SITE.Z))
