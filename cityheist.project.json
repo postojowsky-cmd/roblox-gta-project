@@ -1,0 +1,12 @@
+{
+  "name": "City Heist - Safe Sync",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "CityHeistRojo": {
+        "$className": "Folder",
+        "$path": "src/cityheist"
+      }
+    }
+  }
+}
