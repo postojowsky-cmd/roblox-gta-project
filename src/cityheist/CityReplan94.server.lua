@@ -2015,7 +2015,7 @@ do
                     local corners={pt(-left,-back),pt(right,front),pt(-left,front),pt(right,-back)}
                     local l=Vector3.new(math.huge,0,math.huge);local h=Vector3.new(-math.huge,0,-math.huge)
                     for _,v in ipairs(corners) do l=Vector3.new(math.min(l.X,v.X),0,math.min(l.Z,v.Z));h=Vector3.new(math.max(h.X,v.X),0,math.max(h.Z,v.Z)) end
-                    table.insert(yards,rect(l,h));fenced+=1
+                    local yardRect=rect(l,h);table.insert(yards,yardRect);reserve(yardRect);fenced+=1
                 end
                 print("[District120] Landscaped yards:",fenced,"hedge plants:",hedgeCount)
                 -- Reinforce the exposed underside around the measured driveway terrace.
@@ -2094,5 +2094,63 @@ do
             print("[OwnerMansion105] PLACED:",x,base,z,"footprint:",w,d,"trees removed:",removed)
         end
     end
+end
+-- Finish isolated street ends and blend the visible city edge into the foothills.
+do
+    local finish=Instance.new("Folder");finish.Name="StreetFinish120";finish.Parent=groups.CityHeistInfrastructure86
+    local connected,caps=0,0
+    local seen={}
+    local estate=W:FindFirstChild("CityOwnerEstate105")
+    local driveway=estate and estate:FindFirstChild("MountainDriveway")
+    local driveParts=driveway and driveway:GetChildren() or {}
+    local function driveNear(r)
+        for _,p in ipairs(driveParts) do
+            if p:IsA("BasePart") and p.Name=="RoadDeck" then local l,h=bounds(p);if intersects(r,rect(l,h),2) then return true end end
+        end
+        return false
+    end
+    local function free(r)
+        return not collision(staticIndex,r,2) and not collision(reservedIndex,r,2) and not collision(accessIndex,r,2) and not driveNear(r)
+    end
+    for _,seg in ipairs(segments) do
+        for _,sign in ipairs({-1,1}) do
+            local axis=seg.horizontal and (sign==1 and seg.x2 or seg.x1) or (sign==1 and seg.z2 or seg.z1)
+            local cross=seg.horizontal and (seg.z1+seg.z2)/2 or (seg.x1+seg.x2)/2
+            local width=seg.horizontal and seg.z2-seg.z1 or seg.x2-seg.x1
+            local pos=seg.horizontal and Vector3.new(axis,seg.y,cross) or Vector3.new(cross,seg.y,axis)
+            local dir=seg.horizontal and Vector3.new(sign,0,0) or Vector3.new(0,0,sign)
+            local key=math.floor(pos.X/5)..":"..math.floor(pos.Z/5)
+            if seen[key] then continue end;seen[key]=true
+            local function area(a,b,w)
+                local p,q=pos+dir*a,pos+dir*b
+                return seg.horizontal and {x1=math.min(p.X,q.X),x2=math.max(p.X,q.X),z1=cross-w/2,z2=cross+w/2}
+                    or {x1=cross-w/2,x2=cross+w/2,z1=math.min(p.Z,q.Z),z2=math.max(p.Z,q.Z)}
+            end
+            local ahead=area(0,3,width*.7)
+            if driveNear(ahead) then continue end
+            local nextGap
+            for _,other in ipairs(segments) do
+                if other==seg or math.abs(other.y-seg.y)>.5 then continue end
+                for gap=0,60,2 do
+                    if intersects(area(gap,gap+2,width*.65),other,0) then
+                        nextGap=math.min(nextGap or math.huge,gap);break
+                    end
+                end
+            end
+            if nextGap and nextGap<=2 then continue end
+            local function asphalt(r,n)
+                part(finish,n,Vector3.new(r.x2-r.x1,.35,r.z2-r.z1),CFrame.new((r.x1+r.x2)/2,seg.y-.16,(r.z1+r.z2)/2),Color3.fromRGB(62,64,68),Enum.Material.Asphalt,true)
+            end
+            if nextGap and free(area(0,nextGap+1,width)) then
+                asphalt(area(-1,nextGap+2,width),"StreetLink");connected+=1
+            else
+                local r=area(-width*.75,width*.55,width*1.5)
+                if free(r) then
+                    asphalt(r,"TurningHead");caps+=1
+                end
+            end
+        end
+    end
+    print("[District120] Street links:",connected,"turning heads:",caps)
 end
 print(string.format("[CityReplan94] DONE: %d buildings, %d central, %d parking lots, 1 fuel station, %d decorations, %d landscape chunks",total,centerCount,parkingCount,decor,chunks))
