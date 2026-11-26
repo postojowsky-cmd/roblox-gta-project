@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 108: detailed municipal park and local mansion template")
+print("[CityReplan94] REVISION 109: grass transitions and selected mansion asset")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1264,6 +1264,41 @@ if x2-x1<4000 and z2-z1<4000 then
                 table.insert(trees,p)
             end
         end
+        -- Step 109: fill narrow unused apron strips, including the transition
+        -- between the coarse park grid and the terrain foothills.
+        local infill=Instance.new("Folder");infill.Name="ParkGrassInfill109";infill.Parent=edge
+        local grassColor=terrain:GetMaterialColor(Enum.Material.Grass)
+        for _,child in ipairs(edge:GetDescendants()) do
+            if child:IsA("BasePart") and (child.Name=="ParkLawn" or child.Name=="ContinuousLawn") then child.Color=grassColor end
+        end
+        local gapStep=4
+        local stripes=0
+        for px=maxX+gapStep/2,x2-gapStep/2,gapStep do
+            local startZ,runY,lastZ
+            local function flush()
+                if not startZ then return end
+                part(infill,"GrassSeam",Vector3.new(gapStep,.12,lastZ-startZ+gapStep),CFrame.new(px,runY+.06,(startZ+lastZ)/2),grassColor,Enum.Material.Grass,true)
+                stripes+=1;startZ=nil;runY=nil;lastZ=nil
+            end
+            for pz=z1+gapStep/2,z2-gapStep/2,gapStep do
+                local rr=box(px,pz,gapStep,gapStep)
+                local y
+                if not collision(staticIndex,rr,0) and not collision(roadIndex,rr,0) and not collision(accessIndex,rr,0) and not collision(reservedIndex,rr,0) then
+                    local hit=W:Raycast(Vector3.new(px,400,pz),Vector3.new(0,-430,0),probe)
+                    if hit and hit.Instance~=terrain and math.abs(hit.Position.Y-streetY)<1.2 then
+                        y=hit.Position.Y
+                    end
+                end
+                if y then
+                    if runY and math.abs(y-runY)>.02 then flush() end
+                    if not startZ then startZ=pz;runY=y end
+                    lastZ=pz
+                else flush() end
+            end
+            flush()
+            if math.floor(px/gapStep)%8==0 then task.wait() end
+        end
+        print("[CityReplan94] PARK109 grass seam strips:",stripes)
         print("[CityReplan94] PARK108 lawn cells:",cells,"path nodes:",#pathPoints,"benches:",benches,"lamps:",lamps,"fountains:",fountains,"tree sites:",#trees)
         print("[CityReplan94] EDGE104 parks:",parks,"turnarounds:",caps)
     end
@@ -1403,8 +1438,20 @@ do
     local library=SS:FindFirstChild("CityOwnerMansionTemplates104")
     if not library then library=Instance.new("Folder");library.Name="CityOwnerMansionTemplates104";library.Parent=SS end
     local source=SS:FindFirstChild("OwnerMansionTemplate")
+    local asset
+    local id=106346192114194
     if source and source:IsA("Model") then
-        local asset=source:Clone()
+        asset=source:Clone()
+    else
+        local ok,result=pcall(function() return game:GetService("AssetService"):LoadAssetAsync(id) end)
+        if ok and typeof(result)=="Instance" then
+            asset=Instance.new("Model");asset.Name="MansionRoblox_"..id
+            result.Parent=asset
+        else
+            warn("[OwnerMansion109] IMPORT BLOCKED:",id,tostring(result))
+        end
+    end
+    if asset then
         for _,v in ipairs(asset:GetDescendants()) do
             if v:IsA("LuaSourceContainer") or v:IsA("Sound") or v:IsA("RemoteEvent") or v:IsA("RemoteFunction") or v:IsA("ClickDetector") or v:IsA("ProximityPrompt") or v:IsA("Humanoid") or v:IsA("Explosion") or v:IsA("Tool") then v:Destroy()
             elseif v:IsA("BasePart") then v.Anchored=true end
@@ -1412,9 +1459,9 @@ do
         local lo,hi=bounds(asset);local size=hi-lo
         if size.X>=20 and size.Z>=20 and size.Y>=8 and math.max(size.X,size.Z)<=600 and size.Y<=200 then
             library:ClearAllChildren();asset.Parent=library
-            print("[OwnerMansion108] Studio template ready:",size)
-        else asset:Destroy();warn("[OwnerMansion108] Invalid template dimensions:",size) end
-    else warn("[OwnerMansion108] Insert a Creator Store model in ServerStorage named OwnerMansionTemplate") end
+            print("[OwnerMansion109] Mansion model ready:",size)
+        else asset:Destroy();warn("[OwnerMansion109] Invalid model dimensions:",size) end
+    else warn("[OwnerMansion109] Insert Mansion Roblox 106346192114194 in ServerStorage as OwnerMansionTemplate") end
 end
 -- Step 105: owner estate at the player-selected hill. No access-control logic yet.
 do
