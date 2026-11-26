@@ -737,6 +737,30 @@ for _,p in ipairs(W:GetDescendants()) do
         end
     end
 end
+-- East apron: buildings and small lots only on verified clear, flat land
+-- near the new loop. Keep prison access and the entire prison footprint clear.
+local apronCount=0
+local apron=Instance.new("Folder");apron.Name="EastDistrict100";apron.Parent=groups.CityHeistInfrastructure86
+if #ring==4 then
+    for _,z in ipairs({-660,-540,-420,360,480,600}) do
+        local x=maxX+42
+        local rr={x1=x-22,x2=x+22,z1=z-23,z2=z+23}
+        local link={x1=maxX-2,x2=x-22+.5,z1=z-8,z2=z+8}
+        local y=flat(rr)
+        if y and math.abs(y-streetY)<1 and clear(rr,true,8) and clear(link,false,2)
+            and not collision(accessIndex,rr,10) and not collision(accessIndex,link,4) then
+            local m=residential(apronCount%2==0 and "DetachedHouse" or "NeighborhoodApartment",2000+apronCount)
+            local lo,hi=bounds(m)
+            if hi.X-lo.X<=44 and hi.Z-lo.Z<=46 then
+                m:PivotTo(CFrame.new(x-(lo.X+hi.X)/2,y-lo.Y+.05,z-(lo.Z+hi.Z)/2))
+                m.Parent=groups.CityHeistInfill81;reserve(rr);reserve(link);indexRect(accessIndex,link)
+                part(apron,"Access",Vector3.new(link.x2-link.x1,.25,16),CFrame.new((link.x1+link.x2)/2,streetY-.08,z),Color3.fromRGB(64,65,68),Enum.Material.Asphalt,true)
+                apronCount+=1;total+=1
+            else m:Destroy() end
+        end
+    end
+end
+print("[CityReplan94] APRON100 buildings:",apronCount,"services moved:",serviceMoved)
 for _,s in ipairs(segments) do
     local first,last=s.horizontal and s.x1 or s.z1,s.horizontal and s.x2 or s.z2
     for _,side in ipairs({-1,1}) do
@@ -833,30 +857,6 @@ for i=1,maxSlots,4 do
 end
 groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
 print(string.format("[CityReplan94] EDGE99 added=%d houses=%d blocks=%d apartments=%d retail=%d total=%d",edgeCount,edgeKinds.DetachedHouse,edgeKinds.CourtyardBlock,edgeKinds.NeighborhoodApartment,edgeKinds.Retail,total))
--- East apron: buildings and small lots only on verified clear, flat land
--- near the new loop. Keep prison access and the entire prison footprint clear.
-local apronCount=0
-local apron=Instance.new("Folder");apron.Name="EastDistrict100";apron.Parent=groups.CityHeistInfrastructure86
-if #ring==4 then
-    for _,z in ipairs({-660,-540,-420,360,480,600}) do
-        local x=maxX+42
-        local rr={x1=x-22,x2=x+22,z1=z-23,z2=z+23}
-        local link={x1=maxX-2,x2=x-22+.5,z1=z-8,z2=z+8}
-        local y=flat(rr)
-        if y and math.abs(y-streetY)<1 and clear(rr,true,8) and clear(link,false,2)
-            and not collision(accessIndex,rr,10) and not collision(accessIndex,link,4) then
-            local m=residential(apronCount%2==0 and "DetachedHouse" or "NeighborhoodApartment",2000+apronCount)
-            local lo,hi=bounds(m)
-            if hi.X-lo.X<=44 and hi.Z-lo.Z<=46 then
-                m:PivotTo(CFrame.new(x-(lo.X+hi.X)/2,y-lo.Y+.05,z-(lo.Z+hi.Z)/2))
-                m.Parent=groups.CityHeistInfill81;reserve(rr);reserve(link)
-                part(apron,"Access",Vector3.new(link.x2-link.x1,.25,16),CFrame.new((link.x1+link.x2)/2,streetY-.08,z),Color3.fromRGB(64,65,68),Enum.Material.Asphalt,true)
-                apronCount+=1;total+=1
-            else m:Destroy() end
-        end
-    end
-end
-print("[CityReplan94] APRON100 buildings:",apronCount,"services moved:",serviceMoved)
 -- Keep a reversible original snapshot in ServerStorage for this Play session.
 local backup=Instance.new("Folder");backup.Name="CityReplan94Original";backup.Parent=SS
 for _,f in ipairs(old) do f.Parent=backup end
