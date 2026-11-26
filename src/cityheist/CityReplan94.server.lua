@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 95: downtown replacement and continuous mountain landscape")
+print("[CityReplan94] REVISION 95.1: distinguish block slabs from traffic lanes")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -66,26 +66,37 @@ local function insideOld(p)
     for _,f in ipairs(old) do if p:IsDescendantOf(f) then return true end end
     return false
 end
-local roadRects,segments={},{}
+local roadRects,segments,roadSurfaces={},{},{}
 local minX,maxX,minZ,maxZ=math.huge,-math.huge,math.huge,-math.huge
 for _,p in ipairs(roads:GetDescendants()) do
     if p:IsA("BasePart") and p.Size.X>6 and p.Size.Z>6 then
         local lo,hi=bounds(p)
         local r=rect(lo,hi)
-        table.insert(roadRects,r)
-        minX=math.min(minX,r.x1);maxX=math.max(maxX,r.x2)
-        minZ=math.min(minZ,r.z1);maxZ=math.max(maxZ,r.z2)
         local dx,dz=r.x2-r.x1,r.z2-r.z1
-        if math.max(dx,dz)>=35 and math.max(dx,dz)>=math.min(dx,dz)*2 and math.min(dx,dz)>=10 then
-            r.y=hi.Y
-            r.horizontal=dx>dz
-            table.insert(segments,r)
+        local n=p.Name:lower()
+        local plot=n:find("sidewalk",1,true) or n:find("pavement",1,true) or n:find("plot",1,true) or n:find("block",1,true) or n:find("curb",1,true)
+        local strip=math.max(dx,dz)>=35 and math.max(dx,dz)>=math.min(dx,dz)*2 and math.min(dx,dz)>=10
+        local junction=n:find("intersection",1,true) or n:find("junction",1,true) or n:find("crossroad",1,true)
+        -- Large square block slabs are buildable surfaces, not traffic lanes.
+        local slab=not strip and not junction and math.min(dx,dz)>=55 and math.max(dx,dz)/math.min(dx,dz)<2 and hi.Y-lo.Y<=3
+        if (plot or slab) and hi.Y-lo.Y<=3 then
+            if p.CanQuery then table.insert(roadSurfaces,p) end
+            print("[CityReplan94] PLOT SURFACE",p.Name,math.floor(dx),math.floor(dz))
+        else
+            table.insert(roadRects,r)
+            minX=math.min(minX,r.x1);maxX=math.max(maxX,r.x2)
+            minZ=math.min(minZ,r.z1);maxZ=math.max(maxZ,r.z2)
+            if strip then
+                r.y=hi.Y;r.horizontal=dx>dz
+                table.insert(segments,r)
+            end
         end
     end
 end
 if #segments<4 then warn("[CityReplan94] No usable street segments");return end
 local static={}
 local support={ground,W.Terrain}
+for _,p in ipairs(roadSurfaces) do table.insert(support,p) end
 local elevations={}
 for _,s in ipairs(segments) do table.insert(elevations,s.y) end
 table.sort(elevations)
@@ -337,7 +348,8 @@ for i=1,2 do
         total+=1
         local placed=groups[names[i]]:FindFirstChild(m.Name)
         if placed then
-            local pos=placed:GetPivot().Position
+            local low,high=bounds(placed)
+            local pos=(low+high)/2
             if math.abs(pos.X-(minX+maxX)/2)<450 and math.abs(pos.Z-(minZ+maxZ)/2)<450 then centerCount+=1 end
         end
     end
