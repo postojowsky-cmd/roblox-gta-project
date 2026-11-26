@@ -937,6 +937,7 @@ end
 local cx,cz=(x1+x2)/2,(z1+z2)/2
 local parkMinZ,parkMaxZ=-650,510
 local parkMaxX=x2+180
+local estateKeepout={x1=1046.787-110,x2=1046.787+110,z1=633.584-165,z2=633.584+165}
 local prisonTerrainRects={}
 for _,name in ipairs({"CityPrison","CityPrisonGenerated"}) do
     local obj=W:FindFirstChild(name)
@@ -1109,7 +1110,7 @@ if x2-x1<4000 and z2-z1<4000 then
             return (prisonRect and intersects(r,prisonRect,pad)) or (accessRect and intersects(r,accessRect,pad))
         end
         local function safe(r,pad)
-            return not prisonBlocked(r,pad) and not collision(staticIndex,r,pad) and not collision(reservedIndex,r,pad)
+            return not intersects(r,estateKeepout,pad) and not prisonBlocked(r,pad) and not collision(staticIndex,r,pad) and not collision(reservedIndex,r,pad)
                 and not collision(accessIndex,r,pad)
         end
         local caps,parks=0,0
@@ -1366,7 +1367,7 @@ if x2-x1<4000 and z2-z1<4000 then
                 local rr=box(px,pz,4.08,4.08)
                 local reservation=collision(reservedIndex,rr,0)
                 local y
-                if not prisonBlocked(rr,0) and not collision(staticIndex,rr,0) and not collision(roadIndex,rr,0) and not collision(accessIndex,rr,0) and (not reservation or reservation==parkPlot) then
+                if not intersects(rr,estateKeepout,0) and not prisonBlocked(rr,0) and not collision(staticIndex,rr,0) and not collision(roadIndex,rr,0) and not collision(accessIndex,rr,0) and (not reservation or reservation==parkPlot) then
                     local from=Vector3.new(px,400,pz)
                     local flat=W:Raycast(from,Vector3.new(0,-430,0),flatProbe)
                     local hill=W:Raycast(from,Vector3.new(0,-430,0),hillProbe)
@@ -1628,6 +1629,15 @@ do
                 end
             end
             print("[OwnerMansion115] Door collision parts disabled:",opened)
+            if opened==0 then
+                local reported=0
+                for _,p in ipairs(m:GetDescendants()) do
+                    if p:IsA("BasePart") and p.CanCollide and p.Size.Y>=4 and math.min(p.Size.X,p.Size.Z)<=3 then
+                        print("[OwnerMansion115] Collision candidate:",p:GetFullName(),p.Size,p.Position)
+                        reported+=1;if reported>=35 then break end
+                    end
+                end
+            end
             local forest=landscape:FindFirstChild("MountainForest102")
             local removed=0
             local function clearTrees(r)
