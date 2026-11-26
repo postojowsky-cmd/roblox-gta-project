@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 98: outer residential districts and courtyard infill")
+print("[CityReplan94] REVISION 99: perimeter neighborhoods and raised sidewalks")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -592,6 +592,128 @@ for detailIndex,obj in ipairs(details) do
         m:Destroy()
     end
 end
+-- Step 99: raised sidewalks on clear roadside strips, then outer frontage infill.
+local walks=Instance.new("Folder")
+walks.Name="RaisedSidewalks99"
+walks.Parent=groups.CityHeistStreetscape79
+local walkCount,walkLength=0,0
+local function sidewalkRun(s,side,a,b,y)
+    if b-a<2 then return end
+    local edge=s.horizontal and (side==1 and s.z2 or s.z1) or (side==1 and s.x2 or s.x1)
+    local mid=(a+b)/2
+    local width=5.5
+    local x,z=s.horizontal and mid or edge+side*(width/2+.2),s.horizontal and edge+side*(width/2+.2) or mid
+    local size=s.horizontal and Vector3.new(b-a,.65,width) or Vector3.new(width,.65,b-a)
+    part(walks,"Sidewalk",size,CFrame.new(x,y-.325,z),Color3.fromRGB(170,169,164),Enum.Material.Concrete,true)
+    local kx,kz=s.horizontal and mid or edge+side*.48,s.horizontal and edge+side*.48 or mid
+    local ks=s.horizontal and Vector3.new(b-a,.72,.55) or Vector3.new(.55,.72,b-a)
+    part(walks,"Curb",ks,CFrame.new(kx,y-.29,kz),Color3.fromRGB(195,193,185),Enum.Material.Concrete,true)
+    walkCount+=1;walkLength+=b-a
+end
+-- Explicitly protect named vehicle access surfaces, even when the earlier scan
+-- classified them as flat support.
+local accessIndex={}
+for _,p in ipairs(W:GetDescendants()) do
+    if p:IsA("BasePart") and not insideOld(p) and not p:IsA("Terrain") then
+        local n=p.Name:lower()
+        if n:find("driveway",1,true) or n:find("entrancepath",1,true) or n:find("parking",1,true) or n:find("accessroad",1,true) then
+            local lo,hi=bounds(p)
+            indexRect(accessIndex,rect(lo,hi))
+        end
+    end
+end
+for _,s in ipairs(segments) do
+    local first,last=s.horizontal and s.x1 or s.z1,s.horizontal and s.x2 or s.z2
+    for _,side in ipairs({-1,1}) do
+        local edge=s.horizontal and (side==1 and s.z2 or s.z1) or (side==1 and s.x2 or s.x1)
+        local start,finish,top=nil,nil,nil
+        local function flush()
+            if start then sidewalkRun(s,side,start,finish,top) end
+            start,finish,top=nil,nil,nil
+        end
+        for a=first+8,last-10,4 do
+            local b=math.min(a+4,last-8)
+            local e1,e2=math.min(edge+side*.2,edge+side*5.7),math.max(edge+side*.2,edge+side*5.7)
+            local r=s.horizontal and {x1=a,x2=b,z1=e1,z2=e2} or {x1=e1,x2=e2,z1=a,z2=b}
+            local y=clear(r,true,.1) and not collision(accessIndex,r,3) and flat(r) or nil
+            if y and math.abs(y-s.y)<=.65 then
+                local t=math.max(s.y+.48,y+.16)
+                if start and math.abs(t-top)>.12 then flush() end
+                if not start then start=a;top=t end
+                finish=b
+                reserve(r)
+            else
+                flush()
+            end
+        end
+        flush()
+    end
+    task.wait()
+end
+print(string.format("[CityReplan94] SIDEWALKS99 runs=%d length=%.0f studs",walkCount,walkLength))
+local perimeter={}
+local mx,mz=(minX+maxX)/2,(minZ+maxZ)/2
+for _,s in ipairs(slots) do
+    local axis=s.normal.X~=0 and s.edge.X-mx or s.edge.Z-mz
+    local sign=s.normal.X~=0 and s.normal.X or s.normal.Z
+    if axis*sign>=550 then table.insert(perimeter,s) end
+end
+table.sort(perimeter,function(a,b)
+    if a.edge.X~=b.edge.X then return a.edge.X<b.edge.X end
+    if a.edge.Z~=b.edge.Z then return a.edge.Z<b.edge.Z end
+    if a.normal.X~=b.normal.X then return a.normal.X<b.normal.X end
+    return a.normal.Z<b.normal.Z
+end)
+local edgeCount=0
+local edgeKinds={DetachedHouse=0,CourtyardBlock=0,NeighborhoodApartment=0,Retail=0}
+local function edgePlace(m,s)
+    local heading=CFrame.lookAt(Vector3.zero,s.normal)
+    m:PivotTo(heading)
+    local lo,hi=bounds(m)
+    local size=hi-lo
+    local depth=s.normal.X~=0 and size.X or size.Z
+    for _,gap in ipairs({10,18,28,40}) do
+        local v=s.edge+s.normal*(depth/2+gap)
+        local r={x1=v.X-size.X/2,x2=v.X+size.X/2,z1=v.Z-size.Z/2,z2=v.Z+size.Z/2}
+        if r.x1>=minX-25 and r.x2<=maxX+25 and r.z1>=minZ-25 and r.z2<=maxZ+25
+            and clear(r,true,4) and not collision(accessIndex,r,6) then
+            local y=flat(r)
+            if y and math.abs(y-s.y)<=1.5 then
+                m:PivotTo(heading+Vector3.new(v.X-(lo.X+hi.X)/2,y-lo.Y+.05,v.Z-(lo.Z+hi.Z)/2))
+                m.Parent=groups.CityHeistInfill81
+                reserve(r)
+                return true
+            end
+        end
+    end
+    return false
+end
+-- Round-robin sides so one neighborhood cannot consume the entire budget.
+local sides={{},{},{},{}}
+for _,s in ipairs(perimeter) do
+    local i=s.normal.X~=0 and (s.normal.X>0 and 1 or 2) or (s.normal.Z>0 and 3 or 4)
+    table.insert(sides[i],s)
+end
+local maxSlots=0
+for _,side in ipairs(sides) do maxSlots=math.max(maxSlots,#side) end
+for i=1,maxSlots,4 do
+    if edgeCount>=64 then break end
+    for _,side in ipairs(sides) do
+        local s=side[i]
+        if not s or edgeCount>=64 then continue end
+        local id=1000+edgeCount
+        local kind=({"DetachedHouse","CourtyardBlock","DetachedHouse","NeighborhoodApartment","Retail"})[math.floor(i/4)%5+1]
+        local m=kind=="Retail" and architecture("Retail",id,false,true) or residential(kind,id)
+        if edgePlace(m,s) then
+            edgeCount+=1;total+=1;edgeKinds[kind]+=1
+        else
+            m:Destroy()
+        end
+    end
+    task.wait()
+end
+groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
+print(string.format("[CityReplan94] EDGE99 added=%d houses=%d blocks=%d apartments=%d retail=%d total=%d",edgeCount,edgeKinds.DetachedHouse,edgeKinds.CourtyardBlock,edgeKinds.NeighborhoodApartment,edgeKinds.Retail,total))
 -- Keep a reversible original snapshot in ServerStorage for this Play session.
 local backup=Instance.new("Folder");backup.Name="CityReplan94Original";backup.Parent=SS
 for _,f in ipairs(old) do f.Parent=backup end
