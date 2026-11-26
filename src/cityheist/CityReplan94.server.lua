@@ -68,13 +68,22 @@ for _,p in ipairs(roads:GetDescendants()) do
 end
 if #segments<4 then warn("[CityReplan94] No usable street segments");return end
 local static={}
+local support={ground}
+local function isFlatSurface(p,lo,hi)
+    if hi.Y-lo.Y>2 or p.Size.X<4 or p.Size.Z<4 or hi.Y>4 or lo.Y< -8 then return false end
+    local n=p.Name:lower()
+    if p:IsDescendantOf(city:FindFirstChild("GameplayLocations") or ground) and not p:IsDescendantOf(ground) then return false end
+    return n:find("sidewalk",1,true) or n:find("pavement",1,true) or n:find("plot",1,true) or n:find("ground",1,true) or n:find("baseplate",1,true) or n:find("lot",1,true) or n:find("curb",1,true) or (p.Parent==city and p.Size.X>=20 and p.Size.Z>=20)
+end
 local outer={x1=minX,x2=maxX,z1=minZ,z2=maxZ}
 for _,p in ipairs(W:GetDescendants()) do
     if p:IsA("BasePart") and p.Anchored and not insideOld(p)
         and not p:IsDescendantOf(ground) and not p:IsDescendantOf(roads) then
         local lo,hi=bounds(p)
         -- Ignore only broad, flat ground slabs, not building walls or props.
-        if not (p.Size.Y<=3 and p.Size.X>=150 and p.Size.Z>=150 and hi.Y<=3) then
+        if isFlatSurface(p,lo,hi) then
+            table.insert(support,p)
+        elseif not (p.Size.Y<=3 and p.Size.X>=150 and p.Size.Z>=150 and hi.Y<=3) then
             if p.CanCollide or p.Transparency<0.95 then
                 table.insert(static,rect(lo,hi))
                 outer.x1=math.min(outer.x1,lo.X);outer.x2=math.max(outer.x2,hi.X)
@@ -85,7 +94,7 @@ for _,p in ipairs(W:GetDescendants()) do
 end
 local ray=RaycastParams.new()
 ray.FilterType=Enum.RaycastFilterType.Include
-ray.FilterDescendantsInstances={ground}
+ray.FilterDescendantsInstances=support
 local function surface(x,z)
     local hit=W:Raycast(Vector3.new(x,500,z),Vector3.new(0,-1200,0),ray)
     return hit and hit.Normal.Y>.9 and hit.Position.Y or nil
@@ -105,7 +114,7 @@ local function flat(r)
     for _,x in ipairs({r.x1,r.x2}) do
         for _,z in ipairs({r.z1,r.z2}) do
             local v=surface(x,z)
-            if not v or math.abs(v-y)>.65 then return nil end
+            if not v or math.abs(v-y)>1.5 then return nil end
         end
     end
     return y
@@ -113,7 +122,7 @@ end
 local slots={}
 for _,r in ipairs(segments) do
     local a,b=r.horizontal and r.x1 or r.z1,r.horizontal and r.x2 or r.z2
-    for t=a+18,b-18,12 do
+    for t=a+12,b-12,6 do
         for _,side in ipairs({-1,1}) do
             local x,z,normal
             if r.horizontal then
@@ -155,6 +164,7 @@ local function part(parent,name,size,cf,color,material,solid)
     return p
 end
 local function place(source,dest,service)
+    local rejected={bounds=0,blocked=0,ground=0,access=0}
     local m=source:Clone()
     for _,p in ipairs(m:GetDescendants()) do
         if p:IsA("LuaSourceContainer") then p:Destroy()
@@ -173,11 +183,12 @@ local function place(source,dest,service)
         local lo,hi=orientation.lo,orientation.hi
         local size=hi-lo
         local depth=s.normal.X~=0 and size.X or size.Z
-        local gap=service and 9 or 12
+        for _,gap in ipairs(service and {4,9,15,24,36} or {5,12,20,30}) do
         local center=s.edge+s.normal*(depth/2+gap)
         local r={x1=center.X-size.X/2,x2=center.X+size.X/2,z1=center.Z-size.Z/2,z2=center.Z+size.Z/2}
-        if r.x1>=minX and r.x2<=maxX and r.z1>=minZ and r.z2<=maxZ and clear(r,true,4) then
+        if r.x1>=minX and r.x2<=maxX and r.z1>=minZ and r.z2<=maxZ and clear(r,true,2) then
             local y=flat(r)
+            if not y then rejected.ground+=1 end
             local corridor=nil
             if service and y then
                 local a=s.edge+s.normal*.4
@@ -186,7 +197,9 @@ local function place(source,dest,service)
                     x2=math.max(a.X,b.X)+(s.normal.Z~=0 and 8 or 0),
                     z1=math.min(a.Z,b.Z)-(s.normal.X~=0 and 8 or 0),
                     z2=math.max(a.Z,b.Z)+(s.normal.X~=0 and 8 or 0)}
-                if not clear(corridor,true,0) or not flat(corridor) or math.abs(s.y-y)>1.2 then y=nil end
+                if not clear(corridor,false,0) or math.abs(s.y-y)>3 then
+                    rejected.access+=1;y=nil
+                end
             end
             if y then
                 local delta=Vector3.new(center.X-(lo.X+hi.X)/2,y-lo.Y+.05,center.Z-(lo.Z+hi.Z)/2)
@@ -196,8 +209,11 @@ local function place(source,dest,service)
                 if corridor then
                     table.insert(reserved,corridor)
                     local p=s.edge+s.normal*(gap/2)
-                    local cf=CFrame.lookAt(Vector3.new(p.X,y+.14,p.Z),Vector3.new(p.X,y+.14,p.Z)+s.normal)
-                    part(groups.CityHeistAccess88,"Driveway_"..m.Name,Vector3.new(16,.24,gap+1),cf,Color3.fromRGB(55,58,61),Enum.Material.Asphalt)
+                    local a=Vector3.new(s.edge.X,s.y+.10,s.edge.Z)
+                    local endPos=s.edge+s.normal*(gap+.6)
+                    local b=Vector3.new(endPos.X,y+.19,endPos.Z)
+                    local cf=CFrame.lookAt((a+b)/2,b)
+                    part(groups.CityHeistAccess88,"Driveway_"..m.Name,Vector3.new(16,.22,(b-a).Magnitude+.5),cf,Color3.fromRGB(55,58,61),Enum.Material.Asphalt)
                     local anchor=part(groups.CityHeistAccess88,"Sign_"..m.Name,Vector3.one,CFrame.new(center.X,y+22,center.Z),Color3.new(1,1,1),Enum.Material.SmoothPlastic,false)
                     anchor.Transparency=1;anchor.CanQuery=false
                     local gui=Instance.new("BillboardGui");gui.Size=UDim2.fromOffset(160,42);gui.AlwaysOnTop=true;gui.MaxDistance=350;gui.Parent=anchor
@@ -206,11 +222,16 @@ local function place(source,dest,service)
                 print(string.format("[CityReplan94] PLACED %s X %.1f Z %.1f",m.Name,center.X,center.Z))
                 return true
             end
+        else
+            rejected.blocked+=1
+        end
         end
     end
+    warn(string.format("[CityReplan94] REJECT %s | slots=%d blocked/bounds=%d ground=%d access=%d",source.Name,#slots,rejected.blocked,rejected.ground,rejected.access))
     m:Destroy()
     return false
 end
+print(string.format('[CityReplan94] GRID X %.0f..%.0f Z %.0f..%.0f | roads=%d slots=%d obstacles=%d support=%d',minX,maxX,minZ,maxZ,#roadRects,#slots,#static,#support))
 local infra=old[4]
 for _,n in ipairs({"FuelStation","PublicParking_1","PublicParking_2"}) do
     local source=infra:FindFirstChild(n)
@@ -236,9 +257,24 @@ end
 if total~=28 then abort("Expected 28 buildings, found "..total);return end
 -- Place trees/lights/benches only on verified roadside pockets, reusing saved models.
 local decor=0
-for _,obj in ipairs(old[3]:GetChildren()) do
+local details=old[3]:GetChildren()
+local assigned={}
+for _,obj in ipairs(details) do
     if obj:IsA("Model") then
         if place(obj,groups.CityHeistStreetscape79,false) then decor+=1 end
+    elseif obj:IsA("BasePart") and obj.Name=="StreetDetailFootprint" then
+        local m=Instance.new("Model");m.Name="StreetDetail_"..tostring(decor+1)
+        for _,p in ipairs(details) do
+            if p:IsA("BasePart") and p.Name~="StreetDetailFootprint" and not assigned[p] then
+                local d=Vector2.new(p.Position.X-obj.Position.X,p.Position.Z-obj.Position.Z).Magnitude
+                if d<=obj.Size.X/2+.2 then p:Clone().Parent=m;assigned[p]=true end
+            end
+        end
+        if #m:GetChildren()>0 then
+            m.WorldPivot=CFrame.new(obj.Position)
+            if place(m,groups.CityHeistStreetscape79,false) then decor+=1 end
+        end
+        m:Destroy()
     end
 end
 -- Keep a reversible original snapshot in ServerStorage for this Play session.
