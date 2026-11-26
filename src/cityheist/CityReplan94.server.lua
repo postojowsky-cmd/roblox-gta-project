@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 102: continuous mountain slopes and dense mesh forest")
+print("[CityReplan94] REVISION 103: official forest pack import fix")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1065,11 +1065,11 @@ if x2-x1<4000 and z2-z1<4000 then
                     local n=p.Name:lower()
                     if n:find("soil") or n:find("ground") or n:find("collision") then continue end
                     local q=p:Clone()
+                    if not q then continue end
                     for _,child in ipairs(q:GetDescendants()) do
                         if child:IsA("BasePart") then child:Destroy() end
                     end
                     q.Anchored=true;q.CanCollide=false;q.CanTouch=false;q.CanQuery=false
-                    if q:IsA("MeshPart") then q.RenderFidelity=Enum.RenderFidelity.Automatic end
                     q.Parent=m
                 end
                 local lo,hi=bounds(m);local s=hi-lo
@@ -1081,10 +1081,9 @@ if x2-x1<4000 and z2-z1<4000 then
             print("[CityReplan94] FORESTASSET102 imported:",id,"usable trees:",count)
             asset:Destroy()
         end
-        import(86014764516390,light) -- seven lightweight pine variants
-        import(11351912067,detail) -- realistic birch
-        import(89823509493818,detail) -- realistic ponderosa pine
-        if #light==0 or #detail==0 then import(6432306802,#light==0 and light or detail) end
+        -- Official pack reached mesh cloning in the previous Studio test.
+        -- Keep original mesh fidelity; this property is not writable by server scripts.
+        import(6432306802,light)
         local forest=Instance.new("Folder");forest.Name="MountainForest102";forest.Parent=foundation
         local rng=Random.new(10227)
         local ray=RaycastParams.new()
