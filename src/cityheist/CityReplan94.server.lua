@@ -69,8 +69,14 @@ end
 if #segments<4 then warn("[CityReplan94] No usable street segments");return end
 local static={}
 local support={ground}
+local elevations={}
+for _,s in ipairs(segments) do table.insert(elevations,s.y) end
+table.sort(elevations)
+local streetY=elevations[math.ceil(#elevations/2)]
+local ignored=0
+local largest={}
 local function isFlatSurface(p,lo,hi)
-    if hi.Y-lo.Y>2 or p.Size.X<4 or p.Size.Z<4 or hi.Y>4 or lo.Y< -8 then return false end
+    if hi.Y-lo.Y>3 or p.Size.X<4 or p.Size.Z<4 or hi.Y>streetY+2 or hi.Y<streetY-5 then return false end
     local n=p.Name:lower()
     if p:IsDescendantOf(city:FindFirstChild("GameplayLocations") or ground) and not p:IsDescendantOf(ground) then return false end
     return n:find("sidewalk",1,true) or n:find("pavement",1,true) or n:find("plot",1,true) or n:find("ground",1,true) or n:find("baseplate",1,true) or n:find("lot",1,true) or n:find("curb",1,true) or (p.Parent==city and p.Size.X>=20 and p.Size.Z>=20)
@@ -80,17 +86,30 @@ for _,p in ipairs(W:GetDescendants()) do
     if p:IsA("BasePart") and p.Anchored and not insideOld(p)
         and not p:IsDescendantOf(ground) and not p:IsDescendantOf(roads) then
         local lo,hi=bounds(p)
-        -- Ignore only broad, flat ground slabs, not building walls or props.
-        if isFlatSurface(p,lo,hi) then
-            table.insert(support,p)
-        elseif not (p.Size.Y<=3 and p.Size.X>=150 and p.Size.Z>=150 and hi.Y<=3) then
-            if p.CanCollide or p.Transparency<0.95 then
-                table.insert(static,rect(lo,hi))
-                outer.x1=math.min(outer.x1,lo.X);outer.x2=math.max(outer.x2,hi.X)
-                outer.z1=math.min(outer.z1,lo.Z);outer.z2=math.max(outer.z2,hi.Z)
-            end
+        local dx,dz=hi.X-lo.X,hi.Z-lo.Z
+        local broadFloor=dx>=100 and dz>=100 and hi.Y<=streetY+.8 and hi.Y>=streetY-5
+        local skyOrEffect=not p.CanCollide and (dx>=200 or dz>=200 or p.Transparency>=.95)
+        if isFlatSurface(p,lo,hi) or broadFloor then
+            if p.CanQuery then table.insert(support,p) end
+            ignored+=1
+        elseif hi.Y<=streetY-.15 or lo.Y>streetY+150 or skyOrEffect then
+            ignored+=1
+        elseif p.CanCollide or p.Transparency<.95 then
+            local b=rect(lo,hi)
+            b.name=p:GetFullName()
+            b.loY=lo.Y;b.hiY=hi.Y
+            table.insert(static,b)
+            if dx*dz>10000 then table.insert(largest,b) end
+            outer.x1=math.min(outer.x1,lo.X);outer.x2=math.max(outer.x2,hi.X)
+            outer.z1=math.min(outer.z1,lo.Z);outer.z2=math.max(outer.z2,hi.Z)
         end
     end
+end
+table.sort(largest,function(a,b)return (a.x2-a.x1)*(a.z2-a.z1)>(b.x2-b.x1)*(b.z2-b.z1) end)
+print(string.format("[CityReplan94] FILTER streetY=%.2f ignored=%d",streetY,ignored))
+for i=1,math.min(8,#largest) do
+    local b=largest[i]
+    print(string.format("[CityReplan94] LARGE %s | X %.0f..%.0f Z %.0f..%.0f Y %.1f..%.1f",b.name,b.x1,b.x2,b.z1,b.z2,b.loY,b.hiY))
 end
 local ray=RaycastParams.new()
 ray.FilterType=Enum.RaycastFilterType.Include
@@ -100,11 +119,16 @@ local function surface(x,z)
     return hit and hit.Normal.Y>.9 and hit.Position.Y or nil
 end
 local reserved={}
+local rejectReasons={}
+local function blockedBy(key)
+    rejectReasons[key]=(rejectReasons[key] or 0)+1
+    return false
+end
 local function clear(r,roadCheck,pad)
-    for _,b in ipairs(static) do if intersects(r,b,pad) then return false end end
-    for _,b in ipairs(reserved) do if intersects(r,b,pad) then return false end end
+    for _,b in ipairs(static) do if intersects(r,b,pad) then return blockedBy(b.name) end end
+    for _,b in ipairs(reserved) do if intersects(r,b,pad) then return blockedBy("Reserved plot") end end
     if roadCheck then
-        for _,b in ipairs(roadRects) do if intersects(r,b,pad) then return false end end
+        for _,b in ipairs(roadRects) do if intersects(r,b,pad) then return blockedBy("Road footprint") end end
     end
     return true
 end
@@ -164,6 +188,7 @@ local function part(parent,name,size,cf,color,material,solid)
     return p
 end
 local function place(source,dest,service)
+    table.clear(rejectReasons)
     local rejected={bounds=0,blocked=0,ground=0,access=0}
     local m=source:Clone()
     for _,p in ipairs(m:GetDescendants()) do
@@ -228,6 +253,12 @@ local function place(source,dest,service)
         end
     end
     warn(string.format("[CityReplan94] REJECT %s | slots=%d blocked/bounds=%d ground=%d access=%d",source.Name,#slots,rejected.blocked,rejected.ground,rejected.access))
+    local reasons={}
+    for name,count in pairs(rejectReasons) do table.insert(reasons,{name=name,count=count}) end
+    table.sort(reasons,function(a,b)return a.count>b.count end)
+    for i=1,math.min(5,#reasons) do
+        print("[CityReplan94] BLOCKER",reasons[i].count,reasons[i].name)
+    end
     m:Destroy()
     return false
 end
