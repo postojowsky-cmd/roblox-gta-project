@@ -1211,4 +1211,32 @@ if x2-x1<4000 and z2-z1<4000 then
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
+-- Stage a genuine Creator Store mansion, without executing any imported scripts.
+do
+    local AS=game:GetService("AssetService")
+    local library=Instance.new("Folder");library.Name="CityOwnerMansionTemplates104";library.Parent=SS
+    for _,id in ipairs({9349670387,18902234051}) do
+        local ok,asset=pcall(function() return AS:LoadAssetAsync(id) end)
+        if not ok or typeof(asset)~="Instance" then
+            warn("[OwnerMansion104] Import blocked:",id,tostring(asset));continue
+        end
+        local removed,parts=0,0
+        for _,v in ipairs(asset:GetDescendants()) do
+            if v:IsA("LuaSourceContainer") or v:IsA("RemoteEvent") or v:IsA("RemoteFunction") or v:IsA("ClickDetector") or v:IsA("ProximityPrompt") or v:IsA("Sound") then
+                v:Destroy();removed+=1
+            end
+        end
+        for _,v in ipairs(asset:GetDescendants()) do
+            if v:IsA("BasePart") and not v:IsA("Terrain") then v.Anchored=true;parts+=1 end
+        end
+        local lo,hi=bounds(asset);local size=hi-lo
+        if parts>10 and parts<=12000 and size.X>10 and size.Z>10 and size.Y>5 and size.X<1500 and size.Z<1500 and size.Y<500 then
+            asset.Name="Mansion_"..id;asset.Parent=library
+            print("[OwnerMansion104] STAGED:",id,"parts:",parts,"size:",size,"removed:",removed)
+            break
+        end
+        warn("[OwnerMansion104] Rejected model:",id,"parts:",parts,"size:",size)
+        asset:Destroy()
+    end
+end
 print(string.format("[CityReplan94] DONE: %d buildings, %d central, %d parking lots, 1 fuel station, %d decorations, %d landscape chunks",total,centerCount,parkingCount,decor,chunks))
