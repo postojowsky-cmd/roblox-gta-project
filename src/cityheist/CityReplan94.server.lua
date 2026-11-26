@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 94.4: spatial grid and cooperative planning")
+print("[CityReplan94] REVISION 95: downtown replacement and continuous mountain landscape")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -46,7 +46,23 @@ end
 local function intersects(a,b,pad)
     return a.x1<b.x2+pad and a.x2>b.x1-pad and a.z1<b.z2+pad and a.z2>b.z1-pad
 end
+-- Only decorative models in the explicitly named Downtown folder may be replaced.
+local downtown=city:FindFirstChild("Downtown")
+local replaceable={}
+if downtown then
+    for _,m in ipairs(downtown:GetChildren()) do
+        if m:IsA("Model") then
+            local safe=true
+            for _,v in ipairs(m:GetDescendants()) do
+                if v:IsA("LuaSourceContainer") or v:IsA("ProximityPrompt") or v:IsA("ClickDetector") or v:IsA("Seat") or v:IsA("SpawnLocation") then safe=false;break end
+            end
+            if safe then table.insert(replaceable,m) end
+        end
+    end
+end
+print("[CityReplan94] DOWNTOWN decorative models eligible:",#replaceable)
 local function insideOld(p)
+    for _,m in ipairs(replaceable) do if p:IsDescendantOf(m) then return true end end
     for _,f in ipairs(old) do if p:IsDescendantOf(f) then return true end end
     return false
 end
@@ -305,6 +321,7 @@ for _,n in ipairs({"FuelStation","PublicParking_1","PublicParking_2"}) do
     if not source or not source:IsA("Model") or not place(source,groups.CityHeistInfrastructure86,true) then abort("No safe connected plot for "..n);return end
 end
 local total=0
+local centerCount=0
 for i=1,2 do
     local models={}
     for _,m in ipairs(old[i]:GetChildren()) do if m:IsA("Model") then table.insert(models,m) end end
@@ -318,10 +335,17 @@ for i=1,2 do
         task.wait()
         if not place(m,groups[names[i]],false) then abort("No safe plot for "..m.Name);return end
         total+=1
+        local placed=groups[names[i]]:FindFirstChild(m.Name)
+        if placed then
+            local pos=placed:GetPivot().Position
+            if math.abs(pos.X-(minX+maxX)/2)<450 and math.abs(pos.Z-(minZ+maxZ)/2)<450 then centerCount+=1 end
+        end
     end
     groups[names[i]]:SetAttribute("PlacementComplete",true)
     groups[names[i]]:SetAttribute("BuildingCount",#models)
 end
+if #replaceable==0 then abort("No verified decorative Downtown models; refusing edge-only rebuild");return end
+if centerCount<8 then abort("Only "..centerCount.." new buildings in center; refusing edge-only rebuild");return end
 if total~=28 then abort("Expected 28 buildings, found "..total);return end
 -- Place trees/lights/benches only on verified roadside pockets, reusing saved models.
 local decor=0
@@ -349,26 +373,60 @@ end
 -- Keep a reversible original snapshot in ServerStorage for this Play session.
 local backup=Instance.new("Folder");backup.Name="CityReplan94Original";backup.Parent=SS
 for _,f in ipairs(old) do f.Parent=backup end
+local retired=Instance.new("Folder");retired.Name="OriginalDowntown";retired.Parent=backup
+for _,m in ipairs(replaceable) do m.Parent=retired end
+print("[CityReplan94] DOWNTOWN replaced:",#replaceable,"new central buildings:",centerCount)
 for _,n in ipairs(names) do groups[n].Parent=W end
 stage:Destroy()
--- Natural perimeter outside ALL detected static geometry, including prison.
--- Terrain is preview-only; no Terrain:Clear and no changes inside the city.
+-- Continuous terrain heightfield, with a broad green valley and irregular ridges.
+-- Never write voxels inside the protected city/prison rectangle.
 local terrain=W.Terrain
-local x1,x2,z1,z2=outer.x1-180,outer.x2+180,outer.z1-180,outer.z2+180
-local rng=Random.new(94)
-local hills=0
-local function hill(x,z)
-    local radius=rng:NextNumber(68,94)
-    terrain:FillBall(Vector3.new(x,20,z),radius,Enum.Material.Rock)
-    terrain:FillBall(Vector3.new(x,radius*.48,z),radius*.65,Enum.Material.Grass)
-    hills+=1
-    if hills%4==0 then task.wait() end
+local x1,x2,z1,z2=outer.x1-55,outer.x2+55,outer.z1-55,outer.z2+55
+local step=64
+local extent=480
+local chunks=0
+local function height(x,z)
+    local dx=math.max(x1-x,0,x-x2)
+    local dz=math.max(z1-z,0,z-z2)
+    local d=math.sqrt(dx*dx+dz*dz)
+    if d<16 or d>extent then return nil end
+    local ridge=215+65*math.noise(x/370,z/370,9)
+    local width=105+25*math.noise(x/250,z/250,3)
+    local envelope=math.exp(-((d-ridge)/width)^2)
+    local peak=155+105*math.noise(x/210,z/210,14)+45*math.noise(x/85,z/85,7)
+    local fade=math.clamp((d-16)/65,0,1)*math.clamp((extent-d)/80,0,1)
+    return streetY-1+fade*(7+math.max(0,peak)*envelope+12*math.noise(x/42,z/42,5))
 end
-if x2-x1<5000 and z2-z1<5000 then
-    for x=x1,x2,55 do hill(x,z1);hill(x,z2) end
-    for z=z1,z2,55 do hill(x1,z);hill(x2,z) end
-    hill(x2,z2)
+if x2-x1<4000 and z2-z1<4000 then
+    for x=math.floor((x1-extent)/step)*step,x2+extent,step do
+        for z=math.floor((z1-extent)/step)*step,z2+extent,step do
+            if x+step<=x1 or x>=x2 or z+step<=z1 or z>=z2 then
+                local region=Region3.new(Vector3.new(x,-8,z),Vector3.new(x+step,240,z+step)):ExpandToGrid(4)
+                local materials,occupancy=terrain:ReadVoxels(region,4)
+                local changed=false
+                for ix=1,#materials do
+                    for iz=1,#materials[ix][1] do
+                        local wx,wz=x+(ix-.5)*4,z+(iz-.5)*4
+                        local h=height(wx,wz)
+                        if h then
+                            for iy=1,#materials[ix] do
+                                local wy=-8+(iy-.5)*4
+                                local fill=math.clamp((h-wy)/4+.5,0,1)
+                                if fill>occupancy[ix][iy][iz] then
+                                    occupancy[ix][iy][iz]=fill
+                                    materials[ix][iy][iz]=(wy>100 and wy<h-7) and Enum.Material.Rock or Enum.Material.Grass
+                                    changed=true
+                                end
+                            end
+                        end
+                    end
+                end
+                if changed then terrain:WriteVoxels(region,4,materials,occupancy);chunks+=1 end
+                task.wait()
+            end
+        end
+    end
 else
-    warn("[CityReplan94] Perimeter skipped: anomalous world extent")
+    warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
-print(string.format("[CityReplan94] DONE: %d buildings, 2 parking lots, 1 fuel station, 3 driveways, %d decorations, %d mountain clusters",total,decor,hills))
+print(string.format("[CityReplan94] DONE: %d buildings, %d central, 2 parking lots, 1 fuel station, 3 driveways, %d decorations, %d landscape chunks",total,centerCount,decor,chunks))
