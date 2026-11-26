@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 94.3: Terrain excluded from rectangular obstacle scan")
+print("[CityReplan94] REVISION 94.4: spatial grid and cooperative planning")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -120,17 +120,51 @@ local function surface(x,z)
     return hit and hit.Normal.Y>.9 and hit.Position.Y or nil
 end
 local reserved={}
+-- Spatial hash: inspect only obstacles in cells touched by the candidate.
+local CELL=64
+local function indexRect(index,b)
+    for x=math.floor(b.x1/CELL),math.floor(b.x2/CELL) do
+        for z=math.floor(b.z1/CELL),math.floor(b.z2/CELL) do
+            local key=x..":"..z
+            local bucket=index[key]
+            if not bucket then bucket={};index[key]=bucket end
+            table.insert(bucket,b)
+        end
+    end
+end
+local staticIndex,roadIndex,reservedIndex={},{},{}
+for i,b in ipairs(static) do
+    indexRect(staticIndex,b)
+    if i%300==0 then task.wait() end
+end
+for _,b in ipairs(roadRects) do indexRect(roadIndex,b) end
+local function reserve(b)
+    table.insert(reserved,b)
+    indexRect(reservedIndex,b)
+end
+local function collision(index,r,pad)
+    for x=math.floor((r.x1-pad)/CELL),math.floor((r.x2+pad)/CELL) do
+        for z=math.floor((r.z1-pad)/CELL),math.floor((r.z2+pad)/CELL) do
+            local bucket=index[x..":"..z]
+            if bucket then
+                for _,b in ipairs(bucket) do
+                    if intersects(r,b,pad) then return b end
+                end
+            end
+        end
+    end
+    return nil
+end
 local rejectReasons={}
 local function blockedBy(key)
     rejectReasons[key]=(rejectReasons[key] or 0)+1
     return false
 end
 local function clear(r,roadCheck,pad)
-    for _,b in ipairs(static) do if intersects(r,b,pad) then return blockedBy(b.name) end end
-    for _,b in ipairs(reserved) do if intersects(r,b,pad) then return blockedBy("Reserved plot") end end
-    if roadCheck then
-        for _,b in ipairs(roadRects) do if intersects(r,b,pad) then return blockedBy("Road footprint") end end
-    end
+    if roadCheck and collision(roadIndex,r,pad) then return blockedBy("Road footprint") end
+    if collision(reservedIndex,r,pad) then return blockedBy("Reserved plot") end
+    local b=collision(staticIndex,r,pad)
+    if b then return blockedBy(b.name) end
     return true
 end
 local function flat(r)
@@ -203,7 +237,8 @@ local function place(source,dest,service)
         local lo,hi=bounds(m)
         orientations[normal.X~=0 and (normal.X>0 and 1 or 2) or (normal.Z>0 and 3 or 4)]={heading=heading,lo=lo,hi=hi}
     end
-    for _,s in ipairs(slots) do
+    for slotIndex,s in ipairs(slots) do
+        if slotIndex%100==0 then task.wait() end
         -- +Z points toward the street for parking aisle access.
         local orientation=orientations[s.normal.X~=0 and (s.normal.X>0 and 1 or 2) or (s.normal.Z>0 and 3 or 4)]
         local lo,hi=orientation.lo,orientation.hi
@@ -231,9 +266,9 @@ local function place(source,dest,service)
                 local delta=Vector3.new(center.X-(lo.X+hi.X)/2,y-lo.Y+.05,center.Z-(lo.Z+hi.Z)/2)
                 m:PivotTo(orientation.heading+delta)
                 m.Parent=dest
-                table.insert(reserved,r)
+                reserve(r)
                 if corridor then
-                    table.insert(reserved,corridor)
+                    reserve(corridor)
                     local p=s.edge+s.normal*(gap/2)
                     local a=Vector3.new(s.edge.X,s.y+.10,s.edge.Z)
                     local endPos=s.edge+s.normal*(gap+.6)
@@ -280,6 +315,7 @@ for i=1,2 do
         return av>bv
     end)
     for _,m in ipairs(models) do
+        task.wait()
         if not place(m,groups[names[i]],false) then abort("No safe plot for "..m.Name);return end
         total+=1
     end
@@ -291,7 +327,8 @@ if total~=28 then abort("Expected 28 buildings, found "..total);return end
 local decor=0
 local details=old[3]:GetChildren()
 local assigned={}
-for _,obj in ipairs(details) do
+for detailIndex,obj in ipairs(details) do
+    if detailIndex%20==0 then task.wait() end
     if obj:IsA("Model") then
         if place(obj,groups.CityHeistStreetscape79,false) then decor+=1 end
     elseif obj:IsA("BasePart") and obj.Name=="StreetDetailFootprint" then
@@ -325,6 +362,7 @@ local function hill(x,z)
     terrain:FillBall(Vector3.new(x,20,z),radius,Enum.Material.Rock)
     terrain:FillBall(Vector3.new(x,radius*.48,z),radius*.65,Enum.Material.Grass)
     hills+=1
+    if hills%4==0 then task.wait() end
 end
 if x2-x1<5000 and z2-z1<5000 then
     for x=x1,x2,55 do hill(x,z1);hill(x,z2) end
