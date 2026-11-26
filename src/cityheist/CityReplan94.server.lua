@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 110: terrain seam bridge and self-contained hillside villa")
+print("[CityReplan94] REVISION 111: prison exclusion, continuous park terrain, local mansion only")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -237,6 +237,18 @@ for i,b in ipairs(static) do
     if i%300==0 then task.wait() end
 end
 for _,b in ipairs(roadRects) do indexRect(roadIndex,b) end
+-- Protect the complete compound, including empty courtyards between walls.
+for _,name in ipairs({"CityPrison","CityPrisonGenerated"}) do
+    local obj=W:FindFirstChild(name)
+    if obj then
+        local lo,hi=bounds(obj)
+        if lo.X<hi.X and lo.Z<hi.Z then
+            local rr=rect(lo,hi);rr.name=name.." protected compound"
+            indexRect(staticIndex,rr)
+            print("[CityReplan94] PRISON111 protected:",name,rr.x1,rr.x2,rr.z1,rr.z2)
+        end
+    end
+end
 local function reserve(b)
     table.insert(reserved,b)
     indexRect(reservedIndex,b)
@@ -1264,57 +1276,58 @@ if x2-x1<4000 and z2-z1<4000 then
                 table.insert(trees,p)
             end
         end
-        -- Step 110: bridge the apron/voxel boundary, including sloped edge cells.
-        local infill=Instance.new("Folder");infill.Name="ParkGrassInfill110";infill.Parent=edge
-        local grassColor=terrain:GetMaterialColor(Enum.Material.Grass)
-        for _,child in ipairs(edge:GetDescendants()) do
-            if child:IsA("BasePart") and (child.Name=="ParkLawn" or child.Name=="ContinuousLawn") then child.Color=grassColor end
-        end
+        -- Step 111: rasterize a continuous grass surface at voxel resolution.
+        -- The municipal park reservation is grass, not an obstacle to its own lawn.
         local flatProbe=RaycastParams.new()
         flatProbe.FilterType=Enum.RaycastFilterType.Include
         flatProbe.FilterDescendantsInstances={ground,foundation.ContinuousCityFoundation}
         local hillProbe=RaycastParams.new()
         hillProbe.FilterType=Enum.RaycastFilterType.Include
         hillProbe.FilterDescendantsInstances={terrain}
-        local gapStep=4
-        local stripes,voxelCells=0,0
-        for px=math.floor(maxX/4)*4+2,x2+10,gapStep do
-            local startZ,runY,lastZ
-            local function flush()
-                if not startZ then return end
-                part(infill,"GrassSeam",Vector3.new(gapStep+.12,.24,lastZ-startZ+gapStep+.12),CFrame.new(px,runY,(startZ+lastZ)/2),grassColor,Enum.Material.Grass,true)
-                stripes+=1;startZ=nil;runY=nil;lastZ=nil
-            end
-            for pz=math.floor(z1/4)*4+2,z2+10,gapStep do
-                local rr=box(px,pz,gapStep+.12,gapStep+.12)
-                local y
-                if not collision(staticIndex,rr,0) and not collision(roadIndex,rr,0) and not collision(accessIndex,rr,0) and not collision(reservedIndex,rr,0) then
-                    local origin=Vector3.new(px,400,pz)
-                    local down=Vector3.new(0,-430,0)
-                    local flat=W:Raycast(origin,down,flatProbe)
-                    local hill=W:Raycast(origin,down,hillProbe)
-                    local surface=flat and flat.Position.Y or streetY-.25
-                    if math.abs(surface-streetY)<1.2 and (flat or (hill and hill.Position.Y>=surface-5)) then
-                        -- A terrain underlay joins the actual foothill voxels. Never carve slopes.
-                        if hill and hill.Position.Y<surface+.1 then
-                            local top=surface+.08
-                            terrain:FillBlock(CFrame.new(px,top-3,pz),Vector3.new(4,6,4),Enum.Material.Grass)
-                            voxelCells+=1
-                        end
-                        -- Cover exposed concrete even if a ray hits the shallow terrain instead.
-                        if not hill or hill.Position.Y<surface+.45 then y=surface+.105 end
+        local grassColor=terrain:GetMaterialColor(Enum.Material.Grass)
+        local infill=Instance.new("Folder");infill.Name="ParkGrassInfill111";infill.Parent=edge
+        local region=Region3.new(Vector3.new(maxX-4,-12,z1-4),Vector3.new(x2+12,8,z2+12)):ExpandToGrid(4)
+        local mats,occ=terrain:ReadVoxels(region,4)
+        local origin=region.CFrame.Position-region.Size/2
+        local count=0
+        for ix=1,#mats do
+            local px=origin.X+(ix-.5)*4
+            for iz=1,#mats[ix][1] do
+                local pz=origin.Z+(iz-.5)*4
+                local rr=box(px,pz,4,4)
+                local blocked=collision(staticIndex,rr,0) or collision(roadIndex,rr,0) or collision(accessIndex,rr,0)
+                local reservation=collision(reservedIndex,rr,0)
+                if reservation and reservation~=parkPlot then blocked=true end
+                if blocked then continue end
+                local from=Vector3.new(px,400,pz)
+                local flat=W:Raycast(from,Vector3.new(0,-430,0),flatProbe)
+                local hill=W:Raycast(from,Vector3.new(0,-430,0),hillProbe)
+                if not flat and not hill then continue end
+                local surface=flat and flat.Position.Y or floorY
+                if hill and hill.Position.Y>surface+1 then continue end
+                if math.abs(surface-streetY)>1.2 then continue end
+                local top=surface+.22
+                for iy=1,#mats[ix] do
+                    local wy=origin.Y+(iy-.5)*4
+                    local fill=math.clamp((top-wy)/4+.5,0,1)
+                    if fill>0 and fill>=occ[ix][iy][iz] then
+                        occ[ix][iy][iz]=fill;mats[ix][iy][iz]=Enum.Material.Grass
                     end
                 end
-                if y then
-                    if runY and math.abs(y-runY)>.025 then flush() end
-                    if not startZ then startZ=pz;runY=y end
-                    lastZ=pz
-                else flush() end
+                count+=1
             end
-            flush()
-            if math.floor(px/gapStep)%8==0 then task.wait() end
+            if ix%12==0 then task.wait() end
         end
-        print("[CityReplan94] PARK110 grass strips:",stripes,"terrain bridge cells:",voxelCells)
+        terrain:WriteVoxels(region,4,mats,occ)
+        -- Keep a thin grass-colored substrate under the voxel surface; it covers
+        -- minor interpolation seams without hiding terrain grass above it.
+        for _,child in ipairs(edge:GetDescendants()) do
+            if child:IsA("BasePart") and (child.Name=="ParkLawn" or child.Name=="ContinuousLawn") then
+                child.Color=grassColor
+                child.CFrame+=Vector3.new(0,-.08,0)
+            end
+        end
+        print("[CityReplan94] PARK111 grass terrain cells:",count)
         print("[CityReplan94] PARK108 lawn cells:",cells,"path nodes:",#pathPoints,"benches:",benches,"lamps:",lamps,"fountains:",fountains,"tree sites:",#trees)
         print("[CityReplan94] EDGE104 parks:",parks,"turnarounds:",caps)
     end
@@ -1449,10 +1462,11 @@ if x2-x1<4000 and z2-z1<4000 then
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
--- Step 110: local template first, otherwise a self-contained modern villa.
+-- Step 111: use only the model explicitly installed by the owner.
 do
     local library=SS:FindFirstChild("CityOwnerMansionTemplates104")
     if not library then library=Instance.new("Folder");library.Name="CityOwnerMansionTemplates104";library.Parent=SS end
+    library:ClearAllChildren()
     local source=SS:FindFirstChild("OwnerMansionTemplate")
     local asset=source and source:IsA("Model") and source:Clone() or nil
     if asset then
@@ -1461,71 +1475,11 @@ do
             elseif v:IsA("BasePart") then v.Anchored=true end
         end
         local lo,hi=bounds(asset);local size=hi-lo
-        if not (size.X>=20 and size.Z>=20 and size.Y>=8 and math.max(size.X,size.Z)<=600 and size.Y<=200) then
-            asset:Destroy();asset=nil;warn("[OwnerMansion110] Invalid local template; using built-in villa")
-        end
-    end
-    if not asset then
-        asset=Instance.new("Model");asset.Name="ModernHillsideVilla110"
-        local white=Color3.fromRGB(222,219,209)
-        local dark=Color3.fromRGB(48,51,55)
-        local wood=Color3.fromRGB(127,89,60)
-        local glass=Color3.fromRGB(116,170,189)
-        local stone=Color3.fromRGB(170,166,157)
-        local function P(n,x,y,z,w,h,d,c,mat,solid)
-            return part(asset,n,Vector3.new(w,h,d),CFrame.new(x,y,z),c,mat,solid)
-        end
-        local function wall(n,x,y,z,w,h,d)
-            return P(n,x,y,z,w,h,d,white,Enum.Material.Concrete,true)
-        end
-        local function window(x,y,z,w,h,d)
-            local q=P("Glazing",x,y,z,w,h,d,glass,Enum.Material.Glass,true);q.Transparency=.38
-        end
-        local function slab(n,x,y,z,w,d)
-            P(n,x,y,z,w,.8,d,dark,Enum.Material.Concrete,true)
-        end
-        slab("Foundation",0,.4,0,84,64)
-        slab("GroundFloor",-10,1.2,4,54,42)
-        -- Central glass facade with a walk-in opening at the front.
-        for _,x in ipairs({-36,-23,-10,3,16}) do wall("FacadeColumn",x,7,-17,1.3,11,1.5) end
-        for _,x in ipairs({-29.5,-16.5,9.5}) do window(x,7,-17,11.7,10,.45) end
-        window(-6,7,-17,6,10,.45)
-        wall("RearWall",-10,7,25,54,11,1.2)
-        wall("WestWall",-37,7,4,1.2,11,42)
-        wall("EastWall",17,7,4,1.2,11,42)
-        slab("UpperFloor",-10,13,4,58,45)
-        for _,x in ipairs({-38,-23,-8,7,18}) do wall("UpperColumn",x,19,-18,1.1,11,1.2) end
-        for _,x in ipairs({-30.5,-15.5,-.5,12.5}) do window(x,19,-18,x==12.5 and 9.8 or 13.8,10,.45) end
-        wall("UpperRear",-10,19,18,56,11,1)
-        wall("UpperWest",-38,19,0,1,11,36)
-        wall("UpperEast",18,19,0,1,11,36)
-        slab("CantileverRoof",-10,25,0,62,43)
-        for x=-36,16,2 do P("TimberScreen",x,19,18.8,.8,11,.55,wood,Enum.Material.Wood,true) end
-        slab("Balcony",-10,13,-23,58,10)
-        local rail=P("BalconyGlass",-10,15,-27.7,57,3,.3,glass,Enum.Material.Glass,true);rail.Transparency=.42
-        -- Side garage, front open for a future vehicle display.
-        wall("GarageRear",29,6,17,24,10,1)
-        wall("GarageSide",41,6,1,1,10,32)
-        wall("GarageDivider",17,6,1,1,10,32)
-        slab("GarageRoof",29,11.5,1,26,34)
-        P("GarageHeader",29,10,-15,24,2,1,dark,Enum.Material.Metal,true)
-        P("GarageFloor",29,1.2,1,24,.5,32,stone,Enum.Material.Concrete,true)
-        for i=1,24 do
-            P("IndoorStair",-31,1.6+i*.47,21-i*.85,7,.47,.9,wood,Enum.Material.Wood,true)
-        end
-        -- Outdoor deck and shallow decorative pool.
-        P("PoolDeck",-13,.93,-26,45,.3,11,stone,Enum.Material.Pavement,true)
-        P("PoolBasin",-15,1.35,-26,24,.75,8,Color3.fromRGB(64,117,139),Enum.Material.SmoothPlastic,true)
-        local water=P("PoolWater",-15,1.77,-26,23.2,.12,7.2,Color3.fromRGB(70,170,205),Enum.Material.Glass,false);water.Transparency=.25
-        for _,x in ipairs({-28,-2}) do P("PoolCoping",x,1.7,-26,1,.35,9,white,Enum.Material.Concrete,true) end
-        for _,z in ipairs({-30.4,-21.6}) do P("PoolCoping",-15,1.7,z,27,.35,1,white,Enum.Material.Concrete,true) end
-        for _,x in ipairs({-39,19,39}) do
-            local l=P("EntryLight",x,9,-17,.7,.7,.7,Color3.fromRGB(255,229,187),Enum.Material.Neon,false)
-            local light=Instance.new("PointLight");light.Range=15;light.Brightness=1.3;light.Parent=l
-        end
-        print("[OwnerMansion110] BUILTIN villa ready")
-    else print("[OwnerMansion110] LOCAL template ready") end
-    library:ClearAllChildren();asset.Parent=library
+        if size.X>=20 and size.Z>=20 and size.Y>=8 and math.max(size.X,size.Z)<=600 and size.Y<=200 then
+            asset.Parent=library
+            print("[OwnerMansion111] LOCAL template ready:",size)
+        else asset:Destroy();warn("[OwnerMansion111] Invalid template dimensions:",size) end
+    else warn("[OwnerMansion111] Place OwnerMansionTemplate Model in ServerStorage in edit mode") end
 end
 -- Step 105: owner estate at the player-selected hill. No access-control logic yet.
 do
@@ -1560,27 +1514,36 @@ do
             -- Level only the selected plot; leave the rest of the mountain untouched.
             local base=math.floor(y/4)*4
             -- Sample first, then blend the terrace into its natural surroundings.
-            local columns={}
-            for dx=-math.ceil((w/2+40)/8)*8,w/2+40,8 do
-                for dz=-math.ceil((d/2+40)/8)*8,d/2+40,8 do
-                    local dist=math.max(math.abs(dx)-w/2,math.abs(dz)-d/2,0)
-                    if dist>=40 then continue end
-                    local px,pz=x+dx,z+dz
-                    local rr={x1=px-4,x2=px+4,z1=pz-4,z2=pz+4}
+            local blend=100
+            local region=Region3.new(Vector3.new(x-w/2-blend,-12,z-d/2-blend),Vector3.new(x+w/2+blend,320,z+d/2+blend)):ExpandToGrid(4)
+            local mats,occ=W.Terrain:ReadVoxels(region,4)
+            local origin=region.CFrame.Position-region.Size/2
+            for ix=1,#mats do
+                local px=origin.X+(ix-.5)*4
+                for iz=1,#mats[ix][1] do
+                    local pz=origin.Z+(iz-.5)*4
+                    local dx=math.max(math.abs(px-x)-w/2,0)
+                    local dz=math.max(math.abs(pz-z)-d/2,0)
+                    local dist=math.sqrt(dx*dx+dz*dz)
+                    if dist>=blend then continue end
+                    local rr={x1=px-2,x2=px+2,z1=pz-2,z2=pz+2}
                     if collision(staticIndex,rr,3) or collision(roadIndex,rr,3) or collision(accessIndex,rr,3) or collision(reservedIndex,rr,3) then continue end
                     local h=sample(px,pz)
                     if not h then continue end
-                    local t=math.clamp(dist/40,0,1);t=t*t*(3-2*t)
-                    local target=base*(1-t)+h*t
-                    table.insert(columns,{px,pz,h,target})
+                    local t=dist/blend;t=t*t*(3-2*t)
+                    local top=(base-.15)*(1-t)+h*t
+                    for iy=1,#mats[ix] do
+                        local wy=origin.Y+(iy-.5)*4
+                        local fill=math.clamp((top-wy)/4+.5,0,1)
+                        if wy>=math.min(h,top)-8 then
+                            occ[ix][iy][iz]=fill
+                            mats[ix][iy][iz]=fill>0 and Enum.Material.Grass or Enum.Material.Air
+                        end
+                    end
                 end
+                if ix%12==0 then task.wait() end
             end
-            for _,c in ipairs(columns) do
-                local px,pz,h,top=c[1],c[2],c[3],c[4]
-                if h>top then W.Terrain:FillBlock(CFrame.new(px,(top+h+8)/2,pz),Vector3.new(8,h+8-top,8),Enum.Material.Air) end
-                local bottom=math.min(h,top)-12
-                W.Terrain:FillBlock(CFrame.new(px,(bottom+top)/2,pz),Vector3.new(8,top-bottom,8),Enum.Material.Grass)
-            end
+            W.Terrain:WriteVoxels(region,4,mats,occ)
             part(estate,"EstateTerrace",Vector3.new(w,.8,d),CFrame.new(x,base+.4,z),Color3.fromRGB(173,169,158),Enum.Material.Concrete,true)
             m:PivotTo(m:GetPivot()+Vector3.new(x-(lo.X+hi.X)/2,base+.8-lo.Y,z-(lo.Z+hi.Z)/2))
             m.Parent=estate
