@@ -1811,6 +1811,111 @@ do
                         end
                     end
                 end
+                -- Step 119: entrance architecture, without altering the proven road profile.
+                local entry=Instance.new("Folder");entry.Name="EstateEntrance119";entry.Parent=estate
+                local stone=Color3.fromRGB(151,145,132)
+                local iron=Color3.fromRGB(38,40,39)
+                local rng=Random.new(119)
+                local function atDistance(distance)
+                    for j=1,#path-1 do
+                        local a,b=path[j],path[j+1]
+                        local len=(b-a).Magnitude
+                        if distance<=len then
+                            local q=a:Lerp(b,distance/math.max(len,.001))
+                            return CFrame.lookAt(q,Vector3.new(b.X,q.Y,b.Z))
+                        end
+                        distance-=len
+                    end
+                    return CFrame.new(path[#path])
+                end
+                local function hedge(cf,span)
+                    part(entry,"HedgeCore",Vector3.new(3.8,4.4,span),cf*CFrame.new(0,2.2,0),Color3.fromRGB(47,79,36),Enum.Material.Grass,true)
+                    for z=-span/2+.6,span/2,1.4 do
+                        for _,side in ipairs({-1,1}) do
+                            local leaf=part(entry,"DenseFoliage",Vector3.new(2.4,2.6,2.5),cf*CFrame.new(side*1.2,3.1+rng:NextNumber(-.3,.4),z),Color3.fromRGB(rng:NextInteger(43,68),rng:NextInteger(83,119),rng:NextInteger(30,49)),Enum.Material.Grass,false)
+                            leaf.Shape=Enum.PartType.Ball;leaf.CanQuery=false;leaf.CanTouch=false
+                        end
+                    end
+                end
+                local gateCF=atDistance(32)
+                for _,side in ipairs({-1,1}) do
+                    local cf=gateCF*CFrame.new(side*12,0,0)
+                    part(entry,"GatePillar",Vector3.new(3,9,3),cf*CFrame.new(0,4.5,0),stone,Enum.Material.Slate,true)
+                    part(entry,"PillarCap",Vector3.new(3.6,.6,3.6),cf*CFrame.new(0,9,0),iron,Enum.Material.Metal,true)
+                    local lamp=part(entry,"Lantern",Vector3.new(1.4,1.6,1.4),cf*CFrame.new(0,10,0),Color3.fromRGB(255,221,159),Enum.Material.Neon,false)
+                    local light=Instance.new("PointLight");light.Color=lamp.Color;light.Range=24;light.Brightness=1.4;light.Parent=lamp
+                    -- Open gate leaves along the shoulders: no obstruction for cars.
+                    local leafCF=gateCF*CFrame.new(side*10.8,0,-5)
+                    for _,y in ipairs({.8,5.6}) do
+                        part(entry,"GateRail",Vector3.new(.3,.25,9),leafCF*CFrame.new(0,y,0),iron,Enum.Material.Metal,true)
+                    end
+                    for zz=-4.4,4.4,.8 do
+                        part(entry,"GateBar",Vector3.new(.22,5,.22),leafCF*CFrame.new(0,3.2,zz),iron,Enum.Material.Metal,true)
+                    end
+                    for dist=12,66,6 do
+                        if math.abs(dist-32)<6 then continue end
+                        local frame=atDistance(dist)*CFrame.new(side*15,0,0)
+                        local p=frame.Position
+                        local rr={x1=p.X-4,x2=p.X+4,z1=p.Z-4,z2=p.Z+4}
+                        if not collision(staticIndex,rr,1) and not collision(accessIndex,rr,1) and not collision(reservedIndex,rr,0,true) and not collision(roadIndex,rr,0) then
+                            hedge(frame,6.2)
+                        end
+                    end
+                end
+                -- Small estate nameplate on the outside of the gate.
+                local sign=part(entry,"EstateSign",Vector3.new(2.8,1.4,.18),gateCF*CFrame.new(12,5,1.59),iron,Enum.Material.Metal,false)
+                local gui=Instance.new("SurfaceGui");gui.Face=Enum.NormalId.Back;gui.SizingMode=Enum.SurfaceGuiSizingMode.PixelsPerStud;gui.PixelsPerStud=50;gui.Parent=sign
+                local label=Instance.new("TextLabel");label.Size=UDim2.fromScale(1,1);label.BackgroundTransparency=1;label.Text="PRIVATE ESTATE";label.TextColor3=Color3.fromRGB(231,211,167);label.TextScaled=true;label.Font=Enum.Font.GothamMedium;label.Parent=gui
+                -- Fence existing nearby residential lots, strictly inside their own lot.
+                local fenced=0
+                for _,house in ipairs(groups.CityHeistInfill81:GetChildren()) do
+                    if not house:IsA("Model") or not house.Name:match("^DetachedHouse") then continue end
+                    local lot=house:FindFirstChild("Lot")
+                    if not lot or not lot:IsA("BasePart") or (Vector2.new(lot.Position.X,lot.Position.Z)-Vector2.new(path[1].X,path[1].Z)).Magnitude>220 then continue end
+                    local cf=lot.CFrame*CFrame.new(0,lot.Size.Y/2,0)
+                    local hx,hz=lot.Size.X/2-.65,lot.Size.Z/2-.65
+                    local function fence(a,b)
+                        local len=(b-a).Magnitude
+                        local frame=CFrame.lookAt((a+b)/2,b)
+                        for _,y in ipairs({.7,2.5}) do part(entry,"GardenRail",Vector3.new(.18,.18,len),frame*CFrame.new(0,y,0),iron,Enum.Material.Metal,true) end
+                        for i=0,math.ceil(len/1.5) do
+                            local p=a:Lerp(b,i/math.ceil(len/1.5))
+                            part(entry,"GardenPicket",Vector3.new(.18,3,.18),CFrame.new(p+Vector3.new(0,1.5,0)),iron,Enum.Material.Metal,true)
+                        end
+                    end
+                    local function pt(xx,zz) return cf:PointToWorldSpace(Vector3.new(xx,0,zz)) end
+                    fence(pt(-hx,-hz),pt(hx,-hz))
+                    fence(pt(-hx,-hz),pt(-hx,hz))
+                    fence(pt(hx,-hz),pt(hx,hz))
+                    -- Leave the front open at the pedestrian and garage approach.
+                    fence(pt(5,hz),pt(hx,hz))
+                    fenced+=1
+                end
+                -- Reinforce the exposed underside around the measured driveway terrace.
+                local supports119=0
+                for px=goal.X-24,goal.X+16,5 do
+                    for pz=goal.Z-25,goal.Z+18,5 do
+                        local hit=W:Raycast(Vector3.new(px,base-2,pz),Vector3.new(0,40,0),probe)
+                        if hit and hit.Normal.Y<-.45 and hit.Position.Y>base+2 and hit.Position.Y<goal.Y-.4 then
+                            local top=hit.Position.Y+.05
+                            local ground=W:Raycast(Vector3.new(px,base+1,pz),Vector3.new(0,-80,0),terrainRay)
+                            local bottom=math.min(base-3,ground and ground.Position.Y-1 or base-3)
+                            -- Do not place a pier in the vehicle corridor.
+                            local near=false
+                            for j=1,#path-1 do
+                                local a,b=Vector2.new(path[j].X,path[j].Z),Vector2.new(path[j+1].X,path[j+1].Z)
+                                local ab=b-a
+                                local t=math.clamp((Vector2.new(px,pz)-a):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)
+                                if (Vector2.new(px,pz)-a-ab*t).Magnitude<12 and top>math.min(path[j].Y,path[j+1].Y)-1 then near=true;break end
+                            end
+                            if not near then
+                                part(support,"TerraceRetainingPier119",Vector3.new(4.9,top-bottom,4.9),CFrame.new(px,(top+bottom)/2,pz),stone,Enum.Material.Concrete,true)
+                                supports119+=1
+                            end
+                        end
+                    end
+                end
+                print("[OwnerMansion119] Entrance dressed; fenced houses:",fenced,"additional supports:",supports119)
                 -- Remove trees only along the actual road corridor.
                 if forest then
                     for _,tree in ipairs(forest:GetChildren()) do
