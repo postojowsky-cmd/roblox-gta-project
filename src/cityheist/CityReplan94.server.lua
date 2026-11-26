@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 101: joined pavements, mountain ridges and forest")
+print("[CityReplan94] REVISION 102: continuous mountain slopes and dense mesh forest")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -939,29 +939,45 @@ local function height(x,z)
     local dx=math.max(x1-x,0,x-x2)
     local dz=math.max(z1-z,0,z-z2)
     local d=math.sqrt(dx*dx+dz*dz)
-    if d<=0 then
-        -- Green foothill fingers in the empty east apron, not on prison/access.
-        if x>maxX+95 and math.abs(z)>360 then
-            local r={x1=x-14,x2=x+14,z1=z-14,z2=z+14}
-            if not collision(staticIndex,r,12) and not collision(reservedIndex,r,12) and not collision(roadIndex,r,12) and not collision(accessIndex,r,12) then
-                local fade=math.clamp((x-maxX-95)/160,0,1)*math.clamp((math.abs(z)-360)/170,0,1)
-                fade=fade*fade*(3-2*fade)
-                return floorY+fade*(115+55*math.noise(x/100,z/100,17)+25*math.noise(x/45,z/45,8))
+    -- East apron foothills use a continuous world-space envelope, including
+    -- both sides of the foundation boundary. Protect the prison corridor.
+    local function smooth(t)
+        t=math.clamp(t,0,1)
+        return t*t*(3-2*t)
+    end
+    local spurHeight=0
+    if x>maxX+85 and math.abs(z)>350 then
+        local clearance=smooth((x-maxX-85)/230)*smooth((math.abs(z)-350)/290)
+        local falloff=1-smooth((x-x2-190)/330)
+        falloff*=1-smooth((math.abs(z)-math.max(math.abs(z1),math.abs(z2))-170)/360)
+        local r={x1=x-3,x2=x+3,z1=z-3,z2=z+3}
+        -- Fade before protected objects rather than cutting a tall cliff at their edge.
+        if collision(staticIndex,r,8) or collision(reservedIndex,r,8) or collision(roadIndex,r,8) or collision(accessIndex,r,8) then
+            clearance=0
+        else
+            for _,pad in ipairs({24,48,80,120}) do
+                if collision(staticIndex,r,pad) or collision(reservedIndex,r,pad) or collision(roadIndex,r,pad) or collision(accessIndex,r,pad) then
+                    clearance*=smooth((pad-8)/112)
+                    break
+                end
             end
         end
-        return nil
+        spurHeight=clearance*falloff*(135+42*math.noise(x/180,z/180,17)+18*math.noise(x/85,z/85,8))
+    end
+    if d<=0 then
+        return spurHeight>.2 and floorY+spurHeight or nil
     end
     local a=math.atan2(z-cz,x-cx)
     -- Different ridge distances and lengths around the city, not a uniform ring.
     local reach=550+105*math.sin(a*3+.7)+65*math.cos(a*5-1.1)
-    if d>reach then return nil end
+    if d>reach then return spurHeight>.2 and floorY+spurHeight or nil end
     local ridge=240+95*math.sin(a*2+.4)+55*math.noise(x/390,z/390,9)
     local width=120+45*math.noise(x/260,z/260,3)
     local envelope=math.exp(-((d-ridge)/width)^2)
     local peak=190+115*math.noise(x/210,z/210,14)+65*math.noise(x/95,z/95,7)
     local fade=math.clamp(d/100,0,1)*math.clamp((reach-d)/110,0,1)
     local spur=math.max(0,math.sin(a*4+1.2))*55*math.exp(-((d-390)/150)^2)
-    return floorY-.4+fade*(5+math.max(0,peak)*envelope+spur+16*math.noise(x/55,z/55,5))
+    return floorY+math.max(spurHeight,-.4+fade*(5+math.max(0,peak)*envelope+spur+16*math.noise(x/55,z/55,5)))
 end
 if x2-x1<4000 and z2-z1<4000 then
     local foundation=Instance.new("Folder")
@@ -1001,77 +1017,116 @@ if x2-x1<4000 and z2-z1<4000 then
             end
         end
     end
-    print("[CityReplan94] LANDSCAPE101 irregular foothills complete:",chunks)
-    -- Reuse complete tree models already available in the place. Prefer mesh
-    -- trees; never import an unverified asset ID or copy foreign scripts.
+    print("[CityReplan94] LANDSCAPE102 continuous foothills complete:",chunks)
+    -- Import public Creator Store packs in Studio only. Never execute asset scripts.
     do
-        local templates={}
-        local function consider(m)
-            if not m:IsA("Model") or not m.Name:lower():find("tree",1,true) then return end
-            local lo,hi=bounds(m)
-            if hi.Y-lo.Y<5 or hi.Y-lo.Y>100 or hi.X-lo.X>60 or hi.Z-lo.Z>60 then return end
-            local mesh=false
-            for _,p in ipairs(m:GetDescendants()) do
-                if p:IsA("LuaSourceContainer") or p:IsA("ProximityPrompt") or p:IsA("Seat") then return end
-                if p:IsA("MeshPart") or p:IsA("SpecialMesh") then mesh=true end
+        local AS=game:GetService("AssetService")
+        local library=Instance.new("Folder");library.Name="CityForestTemplates102";library.Parent=SS
+        local light,detail={},{}
+        local function treeName(n)
+            n=n:lower()
+            return n:find("tree",1,true) or n:find("pine",1,true) or n:find("spruce",1,true) or n:find("birch",1,true) or n:find("fir_",1,true)
+        end
+        local function import(id,category)
+            local ok,asset=pcall(function() return AS:LoadAssetAsync(id) end)
+            if not ok or typeof(asset)~="Instance" then
+                warn("[CityReplan94] FORESTASSET102 blocked:",id,tostring(asset));return
             end
-            if mesh and m.Archivable and #templates<12 then table.insert(templates,m) end
-        end
-        for _,root in ipairs({SS,W}) do
-            for _,m in ipairs(root:GetDescendants()) do consider(m) end
-        end
-        local meshCount=#templates
-        local fallback
-        if #templates==0 then
-            -- Saved streetscape tree geometry, without urban planter or soil.
-            local source=old[3]
-            local trunk=source:FindFirstChild("TreeTrunk",true)
-            if trunk and trunk:IsA("BasePart") then
-                local crown
-                for _,p in ipairs(source:GetDescendants()) do
-                    if p:IsA("BasePart") and p.Name=="TreeCrown" and (p.Position-trunk.Position).Magnitude<15 then crown=p;break end
-                end
-                if crown then
-                    fallback=Instance.new("Model");fallback.Name="SavedTree"
-                    trunk:Clone().Parent=fallback;crown:Clone().Parent=fallback
-                    table.insert(templates,fallback)
-                end
+            for _,v in ipairs(asset:GetDescendants()) do
+                if v:IsA("LuaSourceContainer") or v:IsA("Constraint") or v:IsA("JointInstance") or v:IsA("ParticleEmitter") or v:IsA("Sound") or v:IsA("ProximityPrompt") then v:Destroy() end
             end
-        end
-        local forest=Instance.new("Folder");forest.Name="MountainForest101";forest.Parent=foundation
-        local rng=Random.new(10127)
-        local terrainRay=RaycastParams.new()
-        terrainRay.FilterType=Enum.RaycastFilterType.Include
-        terrainRay.FilterDescendantsInstances={terrain}
-        local count=0
-        if #templates>0 then
-            for x=x1-extent,x2+extent,30 do
-                for z=z1-extent,z2+extent,30 do
-                    local wx,wz=x+rng:NextNumber(-10,10),z+rng:NextNumber(-10,10)
-                    local h=height(wx,wz)
-                    if not h or h<floorY+3 then continue end
-                    local rr={x1=wx-12,x2=wx+12,z1=wz-12,z2=wz+12}
-                    if collision(staticIndex,rr,10) or collision(roadIndex,rr,10) or collision(reservedIndex,rr,5) or collision(accessIndex,rr,10) then continue end
-                    local hit=W:Raycast(Vector3.new(wx,400,wz),Vector3.new(0,-430,0),terrainRay)
-                    if not hit or hit.Normal.Y<.48 or hit.Position.Y<floorY+3 then continue end
-                    local m=templates[rng:NextInteger(1,#templates)]:Clone()
-                    if not m then continue end
-                    m:ScaleTo(m:GetScale()*rng:NextNumber(.8,1.55))
-                    m:PivotTo(CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0))
-                    local lo,hi=bounds(m)
-                    m:PivotTo(m:GetPivot()+Vector3.new(wx-(lo.X+hi.X)/2,hit.Position.Y-lo.Y-.35,wz-(lo.Z+hi.Z)/2))
-                    for _,p in ipairs(m:GetDescendants()) do
-                        if p:IsA("BasePart") then p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false end
+            local candidates={}
+            local function inspect(v)
+                if (v:IsA("Model") or v:IsA("Folder")) then
+                    local n,mesh=0,0
+                    for _,p in ipairs(v:GetDescendants()) do
+                        if p:IsA("BasePart") then n+=1 end
+                        if p:IsA("MeshPart") or p:IsA("SpecialMesh") then mesh+=1 end
                     end
-                    m.Parent=forest;count+=1
-                    if count>=1800 then break end
+                    if n>=1 and n<=12 and mesh>=1 and treeName(v.Name) then
+                        local lo,hi=bounds(v);local s=hi-lo
+                        if s.Y>=4 and s.Y>=math.max(s.X,s.Z)*.85 and s.Y<=180 and math.max(s.X,s.Z)<=100 then
+                            table.insert(candidates,v);return
+                        end
+                    end
+                    for _,child in ipairs(v:GetChildren()) do inspect(child) end
+                elseif v:IsA("MeshPart") and treeName(v.Name) and v.Size.Y>=4 and v.Size.Y>=math.max(v.Size.X,v.Size.Z)*1.15 then
+                    local n=v.Name:lower()
+                    if not (n:find("trunk") or n:find("leaf") or n:find("leaves") or n:find("branch")) then table.insert(candidates,v) end
                 end
-                if count>=1800 then break end
-                task.wait()
             end
+            inspect(asset)
+            local count=0
+            for _,v in ipairs(candidates) do
+                local m=Instance.new("Model");m.Name="Tree_"..id.."_"..v.Name
+                local list=v:IsA("BasePart") and {v} or v:GetDescendants()
+                for _,p in ipairs(list) do
+                    if not p:IsA("BasePart") then continue end
+                    local n=p.Name:lower()
+                    if n:find("soil") or n:find("ground") or n:find("collision") then continue end
+                    local q=p:Clone()
+                    for _,child in ipairs(q:GetDescendants()) do
+                        if child:IsA("BasePart") then child:Destroy() end
+                    end
+                    q.Anchored=true;q.CanCollide=false;q.CanTouch=false;q.CanQuery=false
+                    if q:IsA("MeshPart") then q.RenderFidelity=Enum.RenderFidelity.Automatic end
+                    q.Parent=m
+                end
+                local lo,hi=bounds(m);local s=hi-lo
+                if #m:GetChildren()>0 and s.Y>=4 and s.Y<180 then
+                    m.Parent=library;table.insert(category,m);count+=1
+                else m:Destroy() end
+                if count>=12 then break end
+            end
+            print("[CityReplan94] FORESTASSET102 imported:",id,"usable trees:",count)
+            asset:Destroy()
         end
-        if fallback then fallback:Destroy() end
-        print("[CityReplan94] FOREST101 trees:",count,"mesh templates:",meshCount)
+        import(86014764516390,light) -- seven lightweight pine variants
+        import(11351912067,detail) -- realistic birch
+        import(89823509493818,detail) -- realistic ponderosa pine
+        if #light==0 or #detail==0 then import(6432306802,#light==0 and light or detail) end
+        local forest=Instance.new("Folder");forest.Name="MountainForest102";forest.Parent=foundation
+        local rng=Random.new(10227)
+        local ray=RaycastParams.new()
+        ray.FilterType=Enum.RaycastFilterType.Include;ray.FilterDescendantsInstances={terrain}
+        local spots={}
+        for x=x1-extent,x2+extent,20 do
+            for z=z1-extent,z2+extent,20 do
+                local wx,wz=x+rng:NextNumber(-7,7),z+rng:NextNumber(-7,7)
+                local h=height(wx,wz)
+                if not h or h<floorY+2 then continue end
+                local rr={x1=wx-7,x2=wx+7,z1=wz-7,z2=wz+7}
+                if collision(staticIndex,rr,10) or collision(roadIndex,rr,10) or collision(reservedIndex,rr,5) or collision(accessIndex,rr,10) then continue end
+                local hit=W:Raycast(Vector3.new(wx,400,wz),Vector3.new(0,-430,0),ray)
+                if not hit or hit.Normal.Y<.32 or hit.Position.Y<floorY+2 then continue end
+                table.insert(spots,hit.Position)
+            end
+            task.wait()
+        end
+        -- Shuffle globally before applying budget; no empty side from early loop exit.
+        for i=#spots,2,-1 do local j=rng:NextInteger(1,i);spots[i],spots[j]=spots[j],spots[i] end
+        local count,details=0,0
+        if #light+#detail>0 then
+            local limit=math.min(#spots,#light>0 and 6500 or 3000)
+            for i=1,limit do
+                local pos=spots[i]
+                local near=math.max(x1-pos.X,0,pos.X-x2,z1-pos.Z,0,pos.Z-z2)<180
+                local useDetail=#detail>0 and (#light==0 or (near and details<650 and rng:NextNumber()<.35))
+                local pool=useDetail and detail or light
+                local m=pool[rng:NextInteger(1,#pool)]:Clone()
+                local lo,hi=bounds(m)
+                m:ScaleTo(m:GetScale()*rng:NextNumber(22,38)/(hi.Y-lo.Y))
+                m:PivotTo(CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0))
+                lo,hi=bounds(m)
+                m:PivotTo(m:GetPivot()+Vector3.new(pos.X-(lo.X+hi.X)/2,pos.Y-lo.Y-.6,pos.Z-(lo.Z+hi.Z)/2))
+                m.Parent=forest;count+=1
+                if useDetail then details+=1 end
+                if count%100==0 then task.wait() end
+            end
+        else
+            warn("[CityReplan94] FOREST102 no usable imported meshes; insert a Creator Store tree pack manually")
+        end
+        print("[CityReplan94] FOREST102 trees:",count,"detail:",details,"light templates:",#light,"detail templates:",#detail,"eligible points:",#spots)
     end
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
