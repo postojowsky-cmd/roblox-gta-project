@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 99: perimeter neighborhoods and raised sidewalks")
+print("[CityReplan94] REVISION 100: connected streets, continuous sidewalks and distributed services")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -94,6 +94,78 @@ for _,p in ipairs(roads:GetDescendants()) do
     end
 end
 if #segments<4 then warn("[CityReplan94] No usable street segments");return end
+-- Relocate existing gameplay models, never clone or replace their scripts/prompts.
+-- Translate by whole plot offsets to preserve entrance orientation and relative elevation.
+local locations=city:FindFirstChild("GameplayLocations")
+local servicePlots={}
+for _,p in ipairs(roadSurfaces) do
+    if p.Size.X>=100 and p.Size.Z>=100 then
+        local lo,hi=bounds(p)
+        table.insert(servicePlots,{x=(lo.X+hi.X)/2,z=(lo.Z+hi.Z)/2,r=rect(lo,hi)})
+    end
+end
+local serviceMoved=0
+if locations then
+    local serviceTargets={Bank_1={-500,-500},Bank_2={500,-500},Bank_3={500,500},
+        Shop_1={-500,500},Shop_2={-300,-300},Shop_3={300,300},Shop_4={300,-300},
+        Police_1={-500,100},Police_2={500,100},Dealership_1={-100,-500},Dealership_2={100,500}}
+    local keys={}
+    for n in pairs(serviceTargets) do table.insert(keys,n) end
+    table.sort(keys)
+    for _,n in ipairs(keys) do
+        local m=locations:FindFirstChild(n)
+        if not m or not m:IsA("Model") then continue end
+        local lo,hi=bounds(m)
+        local center=(lo+hi)/2
+        local origin=nil;local dist=math.huge
+        for _,p in ipairs(servicePlots) do
+            local d=(p.x-center.X)^2+(p.z-center.Z)^2
+            if d<dist then origin=p;dist=d end
+        end
+        if not origin then continue end
+        local target=serviceTargets[n]
+        local candidates=table.clone(servicePlots)
+        table.sort(candidates,function(a,b)
+            return (a.x-target[1])^2+(a.z-target[2])^2<(b.x-target[1])^2+(b.z-target[2])^2
+        end)
+        local obstacles={}
+        for _,p in ipairs(W:GetDescendants()) do
+            if p:IsA("BasePart") and not p:IsA("Terrain") and p.Anchored and not insideOld(p)
+                and not p:IsDescendantOf(m) and not p:IsDescendantOf(roads) and not p:IsDescendantOf(ground) then
+                local l,h=bounds(p)
+                if h.Y>lo.Y+.6 and l.Y<hi.Y and not (h.Y-l.Y<1 and p.Size.X>=100 and p.Size.Z>=100) then
+                    table.insert(obstacles,rect(l,h))
+                end
+            end
+        end
+        local moved=false
+        for _,p in ipairs(candidates) do
+            local dx,dz=p.x-origin.x,p.z-origin.z
+            local rr={x1=lo.X+dx,x2=hi.X+dx,z1=lo.Z+dz,z2=hi.Z+dz}
+            local blocked=false
+            for _,b in ipairs(roadRects) do if intersects(rr,b,0) then blocked=true;break end end
+            if not blocked then
+                for _,b in ipairs(obstacles) do if intersects(rr,b,3) then blocked=true;break end end
+            end
+            if not blocked then
+                for _,other in ipairs(locations:GetChildren()) do
+                    if other~=m and other:IsA("Model") and other.Name:match("^"..n:match("^%a+").."_") then
+                        local ol,oh=bounds(other)
+                        local oc=(ol+oh)/2
+                        if Vector2.new(center.X+dx-oc.X,center.Z+dz-oc.Z).Magnitude<260 then blocked=true;break end
+                    end
+                end
+            end
+            if not blocked then
+                if dx~=0 or dz~=0 then m:PivotTo(m:GetPivot()+Vector3.new(dx,0,dz));serviceMoved+=1 end
+                print(string.format("[CityReplan94] SERVICE100 %s X %.0f Z %.0f",n,center.X+dx,center.Z+dz))
+                moved=true;break
+            end
+        end
+        if not moved then warn("[CityReplan94] SERVICE100 retained (no safe separated plot): "..n) end
+        task.wait()
+    end
+end
 local static={}
 local support={ground,W.Terrain}
 for _,p in ipairs(roadSurfaces) do table.insert(support,p) end
@@ -205,6 +277,21 @@ local function flat(r)
     end
     return y
 end
+-- Connect street ends with a perimeter loop where the existing map is clear.
+local ring={}
+local function ringSegment(horizontal,a,b,axis)
+    local width=26
+    local rr=horizontal and {x1=a,x2=b,z1=axis-width/2,z2=axis+width/2}
+        or {x1=axis-width/2,x2=axis+width/2,z1=a,z2=b}
+    if collision(staticIndex,rr,2) then return end
+    rr.horizontal=horizontal;rr.y=streetY
+    table.insert(ring,rr);table.insert(segments,rr);table.insert(roadRects,rr);indexRect(roadIndex,rr)
+end
+local lx,hx,lz,hz=minX+15,maxX-15,minZ+15,maxZ-15
+ringSegment(true,lx-13,hx+13,lz)
+ringSegment(true,lx-13,hx+13,hz)
+ringSegment(false,lz+13,hz-13,lx)
+ringSegment(false,lz+13,hz-13,hx)
 local slots={}
 for _,r in ipairs(segments) do
     local a,b=r.horizontal and r.x1 or r.z1,r.horizontal and r.x2 or r.z2
@@ -249,6 +336,20 @@ local function part(parent,name,size,cf,color,material,solid)
     p.Parent=parent
     return p
 end
+local ringFolder=Instance.new("Folder");ringFolder.Name="PerimeterRoads100";ringFolder.Parent=groups.CityHeistInfrastructure86
+for _,s in ipairs(ring) do
+    local x,z=(s.x1+s.x2)/2,(s.z1+s.z2)/2
+    part(ringFolder,"LoopRoad",Vector3.new(s.x2-s.x1,.35,s.z2-s.z1),CFrame.new(x,streetY+.025-.175,z),Color3.fromRGB(62,64,68),Enum.Material.Asphalt,true)
+    local a,b=s.horizontal and s.x1 or s.z1,s.horizontal and s.x2 or s.z2
+    for t=a+18,b-18,24 do
+        local px,pz=s.horizontal and t or x,s.horizontal and z or t
+        local rr={x1=px-1,x2=px+1,z1=pz-1,z2=pz+1}
+        local crossing=false
+        for _,other in ipairs(roadRects) do if other~=s and intersects(rr,other,8) then crossing=true;break end end
+        if not crossing then part(ringFolder,"LaneMark",s.horizontal and Vector3.new(10,.04,.3) or Vector3.new(.3,.04,10),CFrame.new(px,streetY+.05,pz),Color3.fromRGB(230,205,105),Enum.Material.SmoothPlastic,false) end
+    end
+end
+print("[CityReplan94] LOOP100 sides:",#ring)
 local function place(source,dest,service,plot)
     table.clear(rejectReasons)
     local rejected={bounds=0,blocked=0,ground=0,access=0}
@@ -332,6 +433,20 @@ for _,n in ipairs({"FuelStation","PublicParking_1","PublicParking_2"}) do
     local source=infra:FindFirstChild(n)
     if not source or not source:IsA("Model") or not place(source,groups.CityHeistInfrastructure86,true) then abort("No safe connected plot for "..n);return end
 end
+local parkingCount=2
+-- Spread additional lots over outer quadrants before decorative construction.
+for i,goal in ipairs({{-450,-450},{450,-450},{-450,450},{450,450},{600,0},{-600,0}}) do
+    local candidates=table.clone(servicePlots)
+    table.sort(candidates,function(a,b)return (a.x-goal[1])^2+(a.z-goal[2])^2<(b.x-goal[1])^2+(b.z-goal[2])^2 end)
+    local source=infra.PublicParking_1:Clone()
+    source.Name="PublicParking_"..(i+2)
+    source:ScaleTo(source:GetScale()*.72)
+    for j=1,math.min(3,#candidates) do
+        if place(source,groups.CityHeistInfrastructure86,true,candidates[j].r) then parkingCount+=1;break end
+    end
+    source:Destroy()
+end
+print("[CityReplan94] PARKING100 total:",parkingCount)
 local total=0
 local centerCount=0
 for i=1,2 do
@@ -594,20 +709,20 @@ for detailIndex,obj in ipairs(details) do
 end
 -- Step 99: raised sidewalks on clear roadside strips, then outer frontage infill.
 local walks=Instance.new("Folder")
-walks.Name="RaisedSidewalks99"
+walks.Name="RaisedSidewalks100"
 walks.Parent=groups.CityHeistStreetscape79
 local walkCount,walkLength=0,0
 local function sidewalkRun(s,side,a,b,y)
     if b-a<2 then return end
     local edge=s.horizontal and (side==1 and s.z2 or s.z1) or (side==1 and s.x2 or s.x1)
     local mid=(a+b)/2
-    local width=5.5
+    local width=6
     local x,z=s.horizontal and mid or edge+side*(width/2+.2),s.horizontal and edge+side*(width/2+.2) or mid
-    local size=s.horizontal and Vector3.new(b-a,.65,width) or Vector3.new(width,.65,b-a)
-    part(walks,"Sidewalk",size,CFrame.new(x,y-.325,z),Color3.fromRGB(170,169,164),Enum.Material.Concrete,true)
+    local size=s.horizontal and Vector3.new(b-a,.9,width) or Vector3.new(width,.9,b-a)
+    part(walks,"Sidewalk",size,CFrame.new(x,y-.45,z),Color3.fromRGB(170,169,164),Enum.Material.Concrete,true)
     local kx,kz=s.horizontal and mid or edge+side*.48,s.horizontal and edge+side*.48 or mid
     local ks=s.horizontal and Vector3.new(b-a,.72,.55) or Vector3.new(.55,.72,b-a)
-    part(walks,"Curb",ks,CFrame.new(kx,y-.29,kz),Color3.fromRGB(195,193,185),Enum.Material.Concrete,true)
+    part(walks,"Curb",ks,CFrame.new(kx,y-.29,kz),Color3.fromRGB(180,180,176),Enum.Material.Concrete,true)
     walkCount+=1;walkLength+=b-a
 end
 -- Explicitly protect named vehicle access surfaces, even when the earlier scan
@@ -628,20 +743,24 @@ for _,s in ipairs(segments) do
         local edge=s.horizontal and (side==1 and s.z2 or s.z1) or (side==1 and s.x2 or s.x1)
         local start,finish,top=nil,nil,nil
         local function flush()
-            if start then sidewalkRun(s,side,start,finish,top) end
+            if start then
+                sidewalkRun(s,side,start,finish,top)
+                local e1,e2=math.min(edge+side*.2,edge+side*6.2),math.max(edge+side*.2,edge+side*6.2)
+                reserve(s.horizontal and {x1=start,x2=finish,z1=e1,z2=e2} or {x1=e1,x2=e2,z1=start,z2=finish})
+            end
             start,finish,top=nil,nil,nil
         end
         for a=first+8,last-10,4 do
             local b=math.min(a+4,last-8)
-            local e1,e2=math.min(edge+side*.2,edge+side*5.7),math.max(edge+side*.2,edge+side*5.7)
+            local e1,e2=math.min(edge+side*.2,edge+side*6.2),math.max(edge+side*.2,edge+side*5.7)
             local r=s.horizontal and {x1=a,x2=b,z1=e1,z2=e2} or {x1=e1,x2=e2,z1=a,z2=b}
-            local y=clear(r,true,.1) and not collision(accessIndex,r,3) and flat(r) or nil
+            -- Do not reserve individual samples: neighboring samples share a boundary.
+            local y=clear(r,true,.1) and not collision(accessIndex,r,1) and flat(r) or nil
             if y and math.abs(y-s.y)<=.65 then
-                local t=math.max(s.y+.48,y+.16)
+                local t=math.max(s.y+.48,y+.22)
                 if start and math.abs(t-top)>.12 then flush() end
                 if not start then start=a;top=t end
                 finish=b
-                reserve(r)
             else
                 flush()
             end
@@ -650,7 +769,7 @@ for _,s in ipairs(segments) do
     end
     task.wait()
 end
-print(string.format("[CityReplan94] SIDEWALKS99 runs=%d length=%.0f studs",walkCount,walkLength))
+print(string.format("[CityReplan94] SIDEWALKS100 runs=%d length=%.0f studs",walkCount,walkLength))
 local perimeter={}
 local mx,mz=(minX+maxX)/2,(minZ+maxZ)/2
 for _,s in ipairs(slots) do
@@ -714,6 +833,30 @@ for i=1,maxSlots,4 do
 end
 groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
 print(string.format("[CityReplan94] EDGE99 added=%d houses=%d blocks=%d apartments=%d retail=%d total=%d",edgeCount,edgeKinds.DetachedHouse,edgeKinds.CourtyardBlock,edgeKinds.NeighborhoodApartment,edgeKinds.Retail,total))
+-- East apron: buildings and small lots only on verified clear, flat land
+-- near the new loop. Keep prison access and the entire prison footprint clear.
+local apronCount=0
+local apron=Instance.new("Folder");apron.Name="EastDistrict100";apron.Parent=groups.CityHeistInfrastructure86
+if #ring==4 then
+    for _,z in ipairs({-660,-540,-420,360,480,600}) do
+        local x=maxX+42
+        local rr={x1=x-22,x2=x+22,z1=z-23,z2=z+23}
+        local link={x1=maxX-2,x2=x-22+.5,z1=z-8,z2=z+8}
+        local y=flat(rr)
+        if y and math.abs(y-streetY)<1 and clear(rr,true,8) and clear(link,false,2)
+            and not collision(accessIndex,rr,10) and not collision(accessIndex,link,4) then
+            local m=residential(apronCount%2==0 and "DetachedHouse" or "NeighborhoodApartment",2000+apronCount)
+            local lo,hi=bounds(m)
+            if hi.X-lo.X<=44 and hi.Z-lo.Z<=46 then
+                m:PivotTo(CFrame.new(x-(lo.X+hi.X)/2,y-lo.Y+.05,z-(lo.Z+hi.Z)/2))
+                m.Parent=groups.CityHeistInfill81;reserve(rr);reserve(link)
+                part(apron,"Access",Vector3.new(link.x2-link.x1,.25,16),CFrame.new((link.x1+link.x2)/2,streetY-.08,z),Color3.fromRGB(64,65,68),Enum.Material.Asphalt,true)
+                apronCount+=1;total+=1
+            else m:Destroy() end
+        end
+    end
+end
+print("[CityReplan94] APRON100 buildings:",apronCount,"services moved:",serviceMoved)
 -- Keep a reversible original snapshot in ServerStorage for this Play session.
 local backup=Instance.new("Folder");backup.Name="CityReplan94Original";backup.Parent=SS
 for _,f in ipairs(old) do f.Parent=backup end
@@ -760,7 +903,17 @@ local function height(x,z)
     local dx=math.max(x1-x,0,x-x2)
     local dz=math.max(z1-z,0,z-z2)
     local d=math.sqrt(dx*dx+dz*dz)
-    if d<=0 then return nil end
+    if d<=0 then
+        -- Green foothill fingers in the empty east apron, not on prison/access.
+        if x>maxX+95 and math.abs(z)>360 then
+            local r={x1=x-14,x2=x+14,z1=z-14,z2=z+14}
+            if not collision(staticIndex,r,12) and not collision(reservedIndex,r,12) and not collision(roadIndex,r,12) and not collision(accessIndex,r,12) then
+                local fade=math.clamp((x-maxX-95)/130,0,1)*math.clamp((math.abs(z)-360)/130,0,1)
+                return floorY+fade*(28+22*math.noise(x/100,z/100,17))
+            end
+        end
+        return nil
+    end
     local a=math.atan2(z-cz,x-cx)
     -- Different ridge distances and lengths around the city, not a uniform ring.
     local reach=550+105*math.sin(a*3+.7)+65*math.cos(a*5-1.1)
@@ -785,7 +938,7 @@ if x2-x1<4000 and z2-z1<4000 then
     for x=math.floor((x1-extent)/step)*step,x2+extent,step do
         for z=math.floor((z1-extent)/step)*step,z2+extent,step do
             -- Process boundary-crossing chunks too, but never change protected columns.
-            if not (x>=x1 and x+step<=x2 and z>=z1 and z+step<=z2) then
+            if x+step>maxX+95 or not (x>=x1 and x+step<=x2 and z>=z1 and z+step<=z2) then
                 local region=Region3.new(Vector3.new(x,-12,z),Vector3.new(x+step,320,z+step)):ExpandToGrid(4)
                 local materials,occupancy=terrain:ReadVoxels(region,4)
                 local changed=false
@@ -815,4 +968,4 @@ if x2-x1<4000 and z2-z1<4000 then
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
-print(string.format("[CityReplan94] DONE: %d buildings, %d central, 2 parking lots, 1 fuel station, 3 driveways, %d decorations, %d landscape chunks",total,centerCount,decor,chunks))
+print(string.format("[CityReplan94] DONE: %d buildings, %d central, %d parking lots, 1 fuel station, %d decorations, %d landscape chunks",total,centerCount,parkingCount,decor,chunks))
