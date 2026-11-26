@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 100: connected streets, continuous sidewalks and distributed services")
+print("[CityReplan94] REVISION 101: joined pavements, mountain ridges and forest")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -241,13 +241,13 @@ local function reserve(b)
     table.insert(reserved,b)
     indexRect(reservedIndex,b)
 end
-local function collision(index,r,pad)
+local function collision(index,r,pad,ignoreWalk)
     for x=math.floor((r.x1-pad)/CELL),math.floor((r.x2+pad)/CELL) do
         for z=math.floor((r.z1-pad)/CELL),math.floor((r.z2+pad)/CELL) do
             local bucket=index[x..":"..z]
             if bucket then
                 for _,b in ipairs(bucket) do
-                    if intersects(r,b,pad) then return b end
+                    if not (ignoreWalk and b.walk) and intersects(r,b,pad) then return b end
                 end
             end
         end
@@ -709,9 +709,10 @@ for detailIndex,obj in ipairs(details) do
 end
 -- Step 99: raised sidewalks on clear roadside strips, then outer frontage infill.
 local walks=Instance.new("Folder")
-walks.Name="RaisedSidewalks100"
+walks.Name="RaisedSidewalks101"
 walks.Parent=groups.CityHeistStreetscape79
 local walkCount,walkLength=0,0
+local walkRuns={}
 local function sidewalkRun(s,side,a,b,y)
     if b-a<2 then return end
     local edge=s.horizontal and (side==1 and s.z2 or s.z1) or (side==1 and s.x2 or s.x1)
@@ -723,6 +724,7 @@ local function sidewalkRun(s,side,a,b,y)
     local kx,kz=s.horizontal and mid or edge+side*.48,s.horizontal and edge+side*.48 or mid
     local ks=s.horizontal and Vector3.new(b-a,.72,.55) or Vector3.new(.55,.72,b-a)
     part(walks,"Curb",ks,CFrame.new(kx,y-.29,kz),Color3.fromRGB(180,180,176),Enum.Material.Concrete,true)
+    table.insert(walkRuns,{horizontal=s.horizontal,x=x,z=z,a=a,b=b,y=y})
     walkCount+=1;walkLength+=b-a
 end
 -- Explicitly protect named vehicle access surfaces, even when the earlier scan
@@ -770,13 +772,14 @@ for _,s in ipairs(segments) do
             if start then
                 sidewalkRun(s,side,start,finish,top)
                 local e1,e2=math.min(edge+side*.2,edge+side*6.2),math.max(edge+side*.2,edge+side*6.2)
-                reserve(s.horizontal and {x1=start,x2=finish,z1=e1,z2=e2} or {x1=e1,x2=e2,z1=start,z2=finish})
+                local rr=s.horizontal and {x1=start,x2=finish,z1=e1,z2=e2} or {x1=e1,x2=e2,z1=start,z2=finish}
+                rr.walk=true;reserve(rr)
             end
             start,finish,top=nil,nil,nil
         end
-        for a=first+8,last-10,4 do
-            local b=math.min(a+4,last-8)
-            local e1,e2=math.min(edge+side*.2,edge+side*6.2),math.max(edge+side*.2,edge+side*5.7)
+        for a=first,last-.01,2 do
+            local b=math.min(a+2,last)
+            local e1,e2=math.min(edge+side*.2,edge+side*6.2),math.max(edge+side*.2,edge+side*6.2)
             local r=s.horizontal and {x1=a,x2=b,z1=e1,z2=e2} or {x1=e1,x2=e2,z1=a,z2=b}
             -- Do not reserve individual samples: neighboring samples share a boundary.
             local y=clear(r,true,.1) and not collision(accessIndex,r,1) and flat(r) or nil
@@ -857,6 +860,39 @@ for i=1,maxSlots,4 do
 end
 groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
 print(string.format("[CityReplan94] EDGE99 added=%d houses=%d blocks=%d apartments=%d retail=%d total=%d",edgeCount,edgeKinds.DetachedHouse,edgeKinds.CourtyardBlock,edgeKinds.NeighborhoodApartment,edgeKinds.Retail,total))
+-- Finish the public realm after all buildings have been placed.
+do
+    local corners=0
+    local seen={}
+    for _,h in ipairs(walkRuns) do
+        if not h.horizontal then continue end
+        for _,v in ipairs(walkRuns) do
+            if v.horizontal or math.abs(h.y-v.y)>.15 then continue end
+            local x,z=v.x,h.z
+            local dx=math.max(h.a-x,0,x-h.b)
+            local dz=math.max(v.a-z,0,z-v.b)
+            if dx>10 or dz>10 then continue end
+            local r={x1=math.min(x-3,h.b),x2=math.max(x+3,h.a),z1=math.min(z-3,v.b),z2=math.max(z+3,v.a)}
+            local key=string.format("%.1f:%.1f",x,z)
+            if not seen[key] and not collision(roadIndex,r,0) and not collision(staticIndex,r,0)
+                and not collision(reservedIndex,r,0,true) and not collision(accessIndex,r,0) then
+                local y=math.min(h.y,v.y)-.015
+                part(walks,"JoinedCorner",Vector3.new(r.x2-r.x1,.9,r.z2-r.z1),CFrame.new((r.x1+r.x2)/2,y-.45,(r.z1+r.z2)/2),Color3.fromRGB(170,169,164),Enum.Material.Concrete,true)
+                seen[key]=true;corners+=1
+            end
+        end
+    end
+    -- Existing plot slabs retain their exact height and footprint, including
+    -- the support beneath buildings. Remove stud/grid surface styling.
+    local paved=0
+    for _,p in ipairs(roadSurfaces) do
+        if p:IsA("Part") then p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth end
+        p.Material=Enum.Material.Concrete
+        p.Color=Color3.fromRGB(157,158,155)
+        paved+=1
+    end
+    print("[CityReplan94] PAVEMENT101 corners:",corners,"paved plots:",paved)
+end
 -- Keep a reversible original snapshot in ServerStorage for this Play session.
 local backup=Instance.new("Folder");backup.Name="CityReplan94Original";backup.Parent=SS
 for _,f in ipairs(old) do f.Parent=backup end
@@ -894,7 +930,7 @@ for _,p in ipairs(groundParts) do
         if hi.Y<=streetY+.02 and hi.Y>=streetY-3 and area>bestArea and p.Material~=Enum.Material.Grass then
             bestArea=area
             floorY=math.min(hi.Y-.035,streetY-.12)
-            floorColor=p.Color;floorMaterial=p.Material
+            floorColor=Color3.fromRGB(145,147,145);floorMaterial=Enum.Material.Concrete
         end
     end
 end
@@ -908,8 +944,9 @@ local function height(x,z)
         if x>maxX+95 and math.abs(z)>360 then
             local r={x1=x-14,x2=x+14,z1=z-14,z2=z+14}
             if not collision(staticIndex,r,12) and not collision(reservedIndex,r,12) and not collision(roadIndex,r,12) and not collision(accessIndex,r,12) then
-                local fade=math.clamp((x-maxX-95)/130,0,1)*math.clamp((math.abs(z)-360)/130,0,1)
-                return floorY+fade*(28+22*math.noise(x/100,z/100,17))
+                local fade=math.clamp((x-maxX-95)/160,0,1)*math.clamp((math.abs(z)-360)/170,0,1)
+                fade=fade*fade*(3-2*fade)
+                return floorY+fade*(115+55*math.noise(x/100,z/100,17)+25*math.noise(x/45,z/45,8))
             end
         end
         return nil
@@ -964,7 +1001,78 @@ if x2-x1<4000 and z2-z1<4000 then
             end
         end
     end
-    print("[CityReplan94] LANDSCAPE97 irregular foothills complete:",chunks)
+    print("[CityReplan94] LANDSCAPE101 irregular foothills complete:",chunks)
+    -- Reuse complete tree models already available in the place. Prefer mesh
+    -- trees; never import an unverified asset ID or copy foreign scripts.
+    do
+        local templates={}
+        local function consider(m)
+            if not m:IsA("Model") or not m.Name:lower():find("tree",1,true) then return end
+            local lo,hi=bounds(m)
+            if hi.Y-lo.Y<5 or hi.Y-lo.Y>100 or hi.X-lo.X>60 or hi.Z-lo.Z>60 then return end
+            local mesh=false
+            for _,p in ipairs(m:GetDescendants()) do
+                if p:IsA("LuaSourceContainer") or p:IsA("ProximityPrompt") or p:IsA("Seat") then return end
+                if p:IsA("MeshPart") or p:IsA("SpecialMesh") then mesh=true end
+            end
+            if mesh and m.Archivable and #templates<12 then table.insert(templates,m) end
+        end
+        for _,root in ipairs({SS,W}) do
+            for _,m in ipairs(root:GetDescendants()) do consider(m) end
+        end
+        local meshCount=#templates
+        local fallback
+        if #templates==0 then
+            -- Saved streetscape tree geometry, without urban planter or soil.
+            local source=old[3]
+            local trunk=source:FindFirstChild("TreeTrunk",true)
+            if trunk and trunk:IsA("BasePart") then
+                local crown
+                for _,p in ipairs(source:GetDescendants()) do
+                    if p:IsA("BasePart") and p.Name=="TreeCrown" and (p.Position-trunk.Position).Magnitude<15 then crown=p;break end
+                end
+                if crown then
+                    fallback=Instance.new("Model");fallback.Name="SavedTree"
+                    trunk:Clone().Parent=fallback;crown:Clone().Parent=fallback
+                    table.insert(templates,fallback)
+                end
+            end
+        end
+        local forest=Instance.new("Folder");forest.Name="MountainForest101";forest.Parent=foundation
+        local rng=Random.new(10127)
+        local terrainRay=RaycastParams.new()
+        terrainRay.FilterType=Enum.RaycastFilterType.Include
+        terrainRay.FilterDescendantsInstances={terrain}
+        local count=0
+        if #templates>0 then
+            for x=x1-extent,x2+extent,30 do
+                for z=z1-extent,z2+extent,30 do
+                    local wx,wz=x+rng:NextNumber(-10,10),z+rng:NextNumber(-10,10)
+                    local h=height(wx,wz)
+                    if not h or h<floorY+3 then continue end
+                    local rr={x1=wx-12,x2=wx+12,z1=wz-12,z2=wz+12}
+                    if collision(staticIndex,rr,10) or collision(roadIndex,rr,10) or collision(reservedIndex,rr,5) or collision(accessIndex,rr,10) then continue end
+                    local hit=W:Raycast(Vector3.new(wx,400,wz),Vector3.new(0,-430,0),terrainRay)
+                    if not hit or hit.Normal.Y<.48 or hit.Position.Y<floorY+3 then continue end
+                    local m=templates[rng:NextInteger(1,#templates)]:Clone()
+                    if not m then continue end
+                    m:ScaleTo(m:GetScale()*rng:NextNumber(.8,1.55))
+                    m:PivotTo(CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0))
+                    local lo,hi=bounds(m)
+                    m:PivotTo(m:GetPivot()+Vector3.new(wx-(lo.X+hi.X)/2,hit.Position.Y-lo.Y-.35,wz-(lo.Z+hi.Z)/2))
+                    for _,p in ipairs(m:GetDescendants()) do
+                        if p:IsA("BasePart") then p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false end
+                    end
+                    m.Parent=forest;count+=1
+                    if count>=1800 then break end
+                end
+                if count>=1800 then break end
+                task.wait()
+            end
+        end
+        if fallback then fallback:Destroy() end
+        print("[CityReplan94] FOREST101 trees:",count,"mesh templates:",meshCount)
+    end
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
