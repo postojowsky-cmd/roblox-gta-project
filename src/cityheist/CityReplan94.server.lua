@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 105: selected hill owner estate and driveway preview")
+print("[CityReplan94] REVISION 106: municipal park, green buffers and self-contained modern villa")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1068,34 +1068,89 @@ if x2-x1<4000 and z2-z1<4000 then
                 indexRect(roadIndex,rr);reserve(rr);caps+=1
             end
         end
-        for x=math.ceil((x1+28)/58)*58,x2-28,58 do
-            for z=math.ceil((z1+28)/58)*58,z2-28,58 do
-                if parks>=65 then break end
-                if x>minX+120 and x<maxX-120 and z>minZ+120 and z<maxZ-120 then continue end
-                local rr=box(x,z,50,50)
-                if not safe(rr,3) or collision(roadIndex,rr,4) then continue end
-                local y=level(x,z,50,50)
-                if not y then continue end
-                local lawn=part(edge,"PocketGreen",Vector3.new(50,.25,50),CFrame.new(x,y+.125,z),green,Enum.Material.Grass,true)
-                local pathColor=Color3.fromRGB(178,174,160)
-                part(edge,"GardenPath",Vector3.new(5,.12,48),CFrame.new(x,y+.31,z),pathColor,Enum.Material.Concrete,true)
-                part(edge,"GardenPath",Vector3.new(48,.12,5),CFrame.new(x,y+.31,z),pathColor,Enum.Material.Concrete,true)
-                for _,side in ipairs({-1,1}) do
-                    local bx=x+side*14
-                    part(edge,"BenchSeat",Vector3.new(9,.6,2.2),CFrame.new(bx,y+2,z+5),Color3.fromRGB(110,78,49),Enum.Material.Wood,true)
-                    part(edge,"BenchBack",Vector3.new(9,2,.4),CFrame.new(bx,y+3,z+6),Color3.fromRGB(110,78,49),Enum.Material.Wood,true)
-                    for _,d in ipairs({-3,3}) do
-                        part(edge,"BenchLeg",Vector3.new(.8,1.7,1.6),CFrame.new(bx+d,y+1,z+5),Color3.fromRGB(50,52,53),Enum.Material.Metal,true)
-                    end
-                    for _,dz in ipairs({-16,16}) do
-                        local shrub=part(edge,"Shrub",Vector3.new(7,4,7),CFrame.new(bx,y+2,z+dz),Color3.fromRGB(55,91,43),Enum.Material.Grass,false)
-                        shrub.Shape=Enum.PartType.Ball
-                    end
+        -- One coherent municipal park, not repeated pocket gardens.
+        local rng=Random.new(106)
+        local parkPlot,parkY
+        for _,dim in ipairs({{180,120},{150,100},{120,85},{95,70}}) do
+            local w,d=dim[1],dim[2]
+            local best=math.huge
+            for x=x1+w/2+8,x2-w/2-8,12 do
+                for z=z1+d/2+8,z2-d/2-8,12 do
+                    if x<maxX-80 and x>minX+80 and z<maxZ-80 and z>minZ+80 then continue end
+                    if x>900 and z>470 then continue end
+                    local rr=box(x,z,w,d)
+                    if not safe(rr,5) or collision(roadIndex,rr,6) then continue end
+                    local y=level(x,z,w,d)
+                    if not y then continue end
+                    local score=math.abs(x-(maxX+125))+math.abs(z-240)*.6
+                    if score<best then best=score;parkPlot=rr;parkY=y end
                 end
-                reserve(rr);parks+=1
             end
-            task.wait()
+            if parkPlot then break end
         end
+        local function tree(parent,x,y,z,h)
+            part(parent,"Trunk",Vector3.new(h*.09,h*.65,h*.09),CFrame.new(x,y+h*.325,z),Color3.fromRGB(102,78,53),Enum.Material.Wood,true)
+            for _,v in ipairs({{0,.78,0,.62},{-.18,.67,.08,.44},{.18,.72,-.08,.48},{0,.95,0,.42}}) do
+                local q=part(parent,"Canopy",Vector3.new(h*v[4],h*v[4]*.8,h*v[4]),CFrame.new(x+h*v[1],y+h*v[2],z+h*v[3]),Color3.fromRGB(rng:NextInteger(45,75),rng:NextInteger(91,127),rng:NextInteger(38,65)),Enum.Material.Grass,false)
+                q.Shape=Enum.PartType.Ball
+            end
+        end
+        if parkPlot then
+            local rr=parkPlot
+            local x,z=(rr.x1+rr.x2)/2,(rr.z1+rr.z2)/2
+            local w,d=rr.x2-rr.x1,rr.z2-rr.z1
+            local y=parkY
+            local park=Instance.new("Model");park.Name="MunicipalPark106";park.Parent=edge
+            local stone=Color3.fromRGB(188,181,165)
+            local function P(n,sx,sy,sz,dx,dy,dz,c,mat,solid)
+                return part(park,n,Vector3.new(sx,sy,sz),CFrame.new(x+dx,y+dy,z+dz),c,mat,solid)
+            end
+            P("ContinuousLawn",w,.24,d,0,.12,0,green,Enum.Material.Grass,true)
+            P("MainPromenade",w-4,.12,8,0,.3,0,stone,Enum.Material.Concrete,true)
+            P("CrossPromenade",8,.12,d-4,0,.3,0,stone,Enum.Material.Concrete,true)
+            for _,side in ipairs({-1,1}) do
+                P("LoopPath",w-18,.12,5,0,.3,side*(d/2-9),stone,Enum.Material.Concrete,true)
+                P("LoopPath",5,.12,d-18,side*(w/2-9),.3,0,stone,Enum.Material.Concrete,true)
+            end
+            local basin=P("FountainBasin",2,22,22,0,1.3,0,stone,Enum.Material.Concrete,true)
+            basin.Shape=Enum.PartType.Cylinder;basin.CFrame=CFrame.new(x,y+1.3,z)*CFrame.Angles(0,0,math.pi/2)
+            local water=P("FountainWater",.15,19,19,0,2.38,0,Color3.fromRGB(67,153,181),Enum.Material.Glass,false)
+            water.Shape=Enum.PartType.Cylinder;water.CFrame=CFrame.new(x,y+2.38,z)*CFrame.Angles(0,0,math.pi/2);water.Transparency=.25
+            P("FountainColumn",2.5,5,2.5,0,4.8,0,stone,Enum.Material.Marble,true)
+            for _,side in ipairs({-1,1}) do
+                for _,endSide in ipairs({-1,1}) do
+                    local dx,dz=side*w*.29,endSide*d*.26
+                    tree(park,x+dx,y+.24,z+dz,rng:NextNumber(18,24))
+                    tree(park,x+dx*.65,y+.24,z+dz*1.15,rng:NextNumber(12,18))
+                    P("BenchSeat",8,.55,2.4,dx,2, endSide*7,Color3.fromRGB(115,80,48),Enum.Material.Wood,true)
+                    P("BenchBack",8,2,.5,dx,3,endSide*8.1,Color3.fromRGB(115,80,48),Enum.Material.Wood,true)
+                    for _,leg in ipairs({-2.8,2.8}) do P("BenchLeg",.7,1.8,1.7,dx+leg,1.1,endSide*7,Color3.fromRGB(50,53,55),Enum.Material.Metal,true) end
+                    local lx,lz=side*(w/2-13),endSide*(d/2-15)
+                    P("LampPole",.65,12,.65,lx,6,lz,Color3.fromRGB(45,48,51),Enum.Material.Metal,true)
+                    local lamp=P("Lamp",2,1,2,lx,12.3,lz,Color3.fromRGB(255,232,184),Enum.Material.Neon,false)
+                    local light=Instance.new("PointLight");light.Range=24;light.Brightness=1.4;light.Color=lamp.Color;light.Parent=lamp
+                end
+            end
+            reserve(rr);parks=1
+            print("[CityReplan94] PARK106 placed:",x,z,w,d)
+        else warn("[CityReplan94] PARK106 no safe contiguous site") end
+        -- Larger unadorned, irregularly spaced green buffers, no tiled paths.
+        local buffers=0
+        for i=1,160 do
+            if buffers>=12 then break end
+            local w,d=rng:NextInteger(75,160),rng:NextInteger(65,135)
+            local x,z=rng:NextNumber(x1+w/2,x2-w/2),rng:NextNumber(z1+d/2,z2-d/2)
+            if x<maxX-70 and x>minX+70 and z<maxZ-70 and z>minZ+70 then continue end
+            if x>900 and z>470 then continue end
+            local rr=box(x,z,w,d)
+            if not safe(rr,6) or collision(roadIndex,rr,5) then continue end
+            local y=level(x,z,w,d)
+            if not y then continue end
+            part(edge,"GreenBuffer",Vector3.new(w,.18,d),CFrame.new(x,y+.09,z),green,Enum.Material.Grass,true)
+            for j=1,rng:NextInteger(2,5) do tree(edge,x+rng:NextNumber(-w*.36,w*.36),y+.18,z+rng:NextNumber(-d*.36,d*.36),rng:NextNumber(12,23)) end
+            reserve(rr);buffers+=1
+        end
+        print("[CityReplan94] GREEN106 buffers:",buffers)
         print("[CityReplan94] EDGE104 parks:",parks,"turnarounds:",caps)
     end
 
@@ -1211,33 +1266,65 @@ if x2-x1<4000 and z2-z1<4000 then
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
--- Stage a genuine Creator Store mansion, without executing any imported scripts.
+-- Self-contained architectural model: no external asset permission required.
 do
-    local AS=game:GetService("AssetService")
     local library=Instance.new("Folder");library.Name="CityOwnerMansionTemplates104";library.Parent=SS
-    for _,id in ipairs({9349670387,18902234051}) do
-        local ok,asset=pcall(function() return AS:LoadAssetAsync(id) end)
-        if not ok or typeof(asset)~="Instance" then
-            warn("[OwnerMansion104] Import blocked:",id,tostring(asset));continue
-        end
-        local removed,parts=0,0
-        for _,v in ipairs(asset:GetDescendants()) do
-            if v:IsA("LuaSourceContainer") or v:IsA("RemoteEvent") or v:IsA("RemoteFunction") or v:IsA("ClickDetector") or v:IsA("ProximityPrompt") or v:IsA("Sound") then
-                v:Destroy();removed+=1
-            end
-        end
-        for _,v in ipairs(asset:GetDescendants()) do
-            if v:IsA("BasePart") and not v:IsA("Terrain") then v.Anchored=true;parts+=1 end
-        end
-        local lo,hi=bounds(asset);local size=hi-lo
-        if parts>10 and parts<=12000 and size.X>10 and size.Z>10 and size.Y>5 and size.X<1500 and size.Z<1500 and size.Y<500 then
-            asset.Name="Mansion_"..id;asset.Parent=library
-            print("[OwnerMansion104] STAGED:",id,"parts:",parts,"size:",size,"removed:",removed)
-            break
-        end
-        warn("[OwnerMansion104] Rejected model:",id,"parts:",parts,"size:",size)
-        asset:Destroy()
+    local villa=Instance.new("Model");villa.Name="ModernOwnerVilla106";villa.Parent=library
+    local white=Color3.fromRGB(232,230,222)
+    local dark=Color3.fromRGB(44,48,53)
+    local wood=Color3.fromRGB(126,88,57)
+    local glass=Color3.fromRGB(125,176,193)
+    local function P(n,w,h,d,x,y,z,c,mat,solid)
+        return part(villa,n,Vector3.new(w,h,d),CFrame.new(x,y,z),c,mat,solid)
     end
+    local function G(n,w,h,d,x,y,z)
+        local q=P(n,w,h,d,x,y,z,glass,Enum.Material.Glass,true);q.Transparency=.35;return q
+    end
+    P("EstateDeck",104,1,94,0,.5,0,white,Enum.Material.Concrete,true)
+    P("DriveCourt",48,.2,29,-24,1.1,-31,dark,Enum.Material.Asphalt,true)
+    P("GroundFloor",76,.8,36,-8,1.4,1,white,Enum.Material.Concrete,true)
+    P("BackWall",76,13,1,-8,8.3,19,white,Enum.Material.Concrete,true)
+    P("WestWall",1,13,36,-46,8.3,1,white,Enum.Material.Concrete,true)
+    P("EastWall",1,13,36,30,8.3,1,white,Enum.Material.Concrete,true)
+    P("GaragePartition",1,13,35,-16,8.3,1,dark,Enum.Material.Concrete,true)
+    P("GarageHeader",30,3,1,-31,13.3,-17,dark,Enum.Material.Concrete,true)
+    P("GarageDoor",27,10,.5,-31,6.8,-16.8,dark,Enum.Material.Metal,false)
+    for j=1,4 do P("GarageDoorSlat",27,.12,.2,-31,2+j*2,-17.15,white,Enum.Material.Metal,false) end
+    G("LivingGlassLeft",17,12,.6,-7,7.8,-17)
+    G("LivingGlassRight",17,12,.6,20,7.8,-17)
+    P("EntryHeader",10,3,1,6.5,13.3,-17,wood,Enum.Material.Wood,true)
+    for _,x in ipairs({-15,1.5,11.5,29}) do P("WindowFrame",.5,13,.9,x,8.3,-17,dark,Enum.Material.Metal,true) end
+    P("UpperSlab",82,1.4,42,-7,15.5,1,white,Enum.Material.Concrete,true)
+    P("UpperFloor",60,.6,28,-2,16.5,5,wood,Enum.Material.WoodPlanks,true)
+    P("UpperBackWall",60,11,1,-2,22,19,white,Enum.Material.Concrete,true)
+    P("UpperLeftWall",1,11,28,-32,22,5,white,Enum.Material.Concrete,true)
+    G("UpperRightGlass",.7,10,26,28,22,5)
+    G("UpperFrontGlass",58,10,.7,-2,22,-9)
+    for _,x in ipairs({-31,-16,-2,13,27}) do P("UpperMullion",.45,11,1,x,22,-9,dark,Enum.Material.Metal,true) end
+    P("CantileverRoof",67,1.5,34,-2,28,4,white,Enum.Material.Concrete,true)
+    P("RoofAccent",20,1,30,-36,16.8,3,dark,Enum.Material.Concrete,true)
+    G("BalconyRail",59,3,.4,-2,17.8,-19)
+    for j=1,15 do P("ExteriorStair",5,.7,2.1,34,1.5+j*.95,18-j*2.05,white,Enum.Material.Concrete,true) end
+    P("PoolDeck",86,.25,23,0,1.15,34,wood,Enum.Material.WoodPlanks,true)
+    P("PoolBasin",44,.6,17,7,1.5,34,Color3.fromRGB(32,104,132),Enum.Material.SmoothPlastic,true)
+    local water=P("PoolWater",42,.15,15,7,2,34,Color3.fromRGB(53,170,205),Enum.Material.Glass,false);water.Transparency=.28
+    for _,side in ipairs({-1,1}) do
+        P("PoolCoping",46,.55,1,7,2,34+side*8.5,white,Enum.Material.Concrete,true)
+        P("PoolCoping",1,.55,17,7+side*22.5,2,34,white,Enum.Material.Concrete,true)
+    end
+    for _,x in ipairs({-30,-20}) do
+        P("Lounger",5,.8,11,x,2,34,white,Enum.Material.Fabric,true)
+        P("LoungerBack",5,.8,4,x,3,30,white,Enum.Material.Fabric,true)
+    end
+    P("SofaBase",14,1.5,5,14,2.8,10,white,Enum.Material.Fabric,true)
+    P("SofaBack",14,3,1,14,4,12,dark,Enum.Material.Fabric,true)
+    P("CoffeeTable",7,1.3,3,14,2.5,4,wood,Enum.Material.Wood,true)
+    P("KitchenIsland",10,3.5,4,-7,3.5,11,white,Enum.Material.Marble,true)
+    for _,x in ipairs({-43,26}) do
+        local lamp=P("EntryLight",.6,1.6,.6,x,10,-17.6,Color3.fromRGB(255,222,170),Enum.Material.Neon,false)
+        local light=Instance.new("PointLight");light.Range=22;light.Brightness=1.4;light.Parent=lamp
+    end
+    print("[OwnerMansion106] Built local modern villa template")
 end
 -- Step 105: owner estate at the player-selected hill. No access-control logic yet.
 do
@@ -1265,7 +1352,7 @@ do
         lo,hi=bounds(m);size=hi-lo
         local w,d=math.max(100,size.X+30),math.max(100,size.Z+30)
         local plot={x1=x-w/2,x2=x+w/2,z1=z-d/2,z2=z+d/2}
-        if not y or y<35 or collision(staticIndex,plot,8) or collision(reservedIndex,plot,8) or collision(roadIndex,plot,8) or collision(accessIndex,plot,8) then
+        if not y or y<15 or collision(staticIndex,plot,8) or collision(reservedIndex,plot,8) or collision(roadIndex,plot,8) or collision(accessIndex,plot,8) then
             warn("[OwnerMansion105] Unsafe hill footprint:",x,y,z);m:Destroy()
         else
             local estate=Instance.new("Folder");estate.Name="CityOwnerEstate105";estate.Parent=W
