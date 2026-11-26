@@ -1287,11 +1287,12 @@ if x2-x1<4000 and z2-z1<4000 then
         end
         route(function(t)return maxX+48+13*math.sin(t/68),t end,parkMinZ+24,parkMaxZ-24,8)
         route(function(t)return x2+65+10*math.sin(t/85),t end,parkMinZ+24,parkMaxZ-24,8)
-        for _,zz in ipairs({-590,-520,-450,-390,-310,-230,-150,-70,15,95,155,215,275,335,400,470}) do
-            route(function(t)return t,zz+8*math.sin(t/47) end,maxX+20,parkMaxX-20,7)
+        for _,v in ipairs({{-560,20,7},{-390,34,6},{-155,25,5},{110,32,6},{290,20,7},{465,28,5}}) do
+            local zz,amp,width=v[1],v[2],v[3]
+            route(function(t)return t,zz+amp*math.sin((t-maxX)/85) end,maxX+20,parkMaxX-20,width)
         end
-        route(function(t)return x2+120+9*math.sin(t/65),t end,parkMinZ+24,parkMaxZ-24,7)
-        route(function(t)return maxX+100+12*math.sin(t/90),t end,parkMinZ+24,parkMaxZ-24,7)
+        route(function(t)return maxX+105+25*math.sin(t/95),t end,-520,-210,5)
+        route(function(t)return x2+110+23*math.sin(t/80),t end,180,470,5)
         -- Furniture faces the nearest promenade, never the roadway.
         local function bench(p,q)
             local cf=CFrame.lookAt(Vector3.new(p.X,p.Y+.18,p.Z),Vector3.new(q.X,p.Y+.18,q.Z))
@@ -1334,8 +1335,8 @@ if x2-x1<4000 and z2-z1<4000 then
         end
         local circles=0
         for _,p in ipairs(sites) do
-            if circles>=8 then break end
-            if not near(p,pathPoints,12) or near(p,plazas,65) or not available(p.X,p.Z,38,38) then continue end
+            if circles>=5 then break end
+            if not near(p,pathPoints,12) or near(p,plazas,95) or not available(p.X,p.Z,38,38) then continue end
             disk("RestPlaza",p.X,p.Y+.32,p.Z,18,.32,stone,Enum.Material.Pavement,true)
             disk("GardenIsland",p.X,p.Y+.56,p.Z,6,.45,green,Enum.Material.Grass,true)
             for i=0,3 do
@@ -1356,7 +1357,7 @@ if x2-x1<4000 and z2-z1<4000 then
             if q and dist>=9 and dist<=17 and not near(p,plazas,21) and not near(p,furniture,26) and available(p.X,p.Z,10,10) then
                 if (benches+lamps)%2==0 then bench(p,q);benches+=1 else lamp(p);lamps+=1 end
                 table.insert(furniture,p)
-            elseif dist>10 and not near(p,plazas,23) and not near(p,furniture,8) and not near(p,trees,12) and rng:NextNumber()<.65 then
+            elseif dist>10 and not near(p,plazas,23) and not near(p,furniture,8) and not near(p,trees,14) and rng:NextNumber()<.55 then
                 local marker=P("ParkTreeSite",Vector3.new(.2,.2,.2),CFrame.new(p+Vector3.new(0,.16,0)),green,Enum.Material.Grass,false)
                 marker.Transparency=1;marker.CanQuery=false;marker.CanTouch=false
                 table.insert(trees,p)
@@ -1715,6 +1716,7 @@ do
                     end
                 end
             end
+            print("[OwnerMansion117] Current inferred entrance:",goal)
             for _,a in ipairs(starts) do
                 if path then break end
                 for _,extra in ipairs({100,180,260}) do
@@ -1793,13 +1795,14 @@ do
                     local cf=CFrame.lookAt(mid,b)
                     local length=(b-a).Magnitude
                     -- Thin deck with a retaining base; terrain is not globally cleared.
-                    part(drive,"RoadDeck",Vector3.new(18,1.2,length+3),cf*CFrame.new(0,-.6,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
-                    part(drive,"RoadBase",Vector3.new(18,5,length+3),cf*CFrame.new(0,-3,0),Color3.fromRGB(100,99,95),Enum.Material.Concrete,true)
-                    local joint=part(drive,"RoadJoint",Vector3.new(1.2,18,18),CFrame.new(b.X,b.Y-.6,b.Z)*CFrame.Angles(0,0,math.pi/2),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
-                    joint.Shape=Enum.PartType.Cylinder
+                    local deck=part(drive,"RoadDeck",Vector3.new(20,.8,length+1.0),cf*CFrame.new(0,-.4,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
+                    deck.CustomPhysicalProperties=PhysicalProperties.new(1,.85,0,1,1)
+                    part(drive,"RoadBase",Vector3.new(20,5,length+1),cf*CFrame.new(0,-3.3,0),Color3.fromRGB(100,99,95),Enum.Material.Concrete,false)
+                    -- No horizontal collidable cylinders at sloping joints.
+                    -- They previously formed raised lips under the vehicle.
                     if j%4==0 then
                         for _,side in ipairs({-1,1}) do
-                            part(drive,"EdgePost",Vector3.new(.6,2.8,.6),cf*CFrame.new(side*8,1.4,0),Color3.fromRGB(190,190,185),Enum.Material.Metal,true)
+                            part(drive,"EdgePost",Vector3.new(.6,2.8,.6),cf*CFrame.new(side*11,1.4,0),Color3.fromRGB(190,190,185),Enum.Material.Metal,true)
                         end
                     end
                 end
@@ -1813,7 +1816,7 @@ do
                             local a,b=Vector2.new(path[j].X,path[j].Z),Vector2.new(path[j+1].X,path[j+1].Z)
                             local ab=b-a
                             local t=math.clamp((v-a):Dot(ab)/ab:Dot(ab),0,1)
-                            if (v-a-ab*t).Magnitude<17 then tree:Destroy();removed+=1;break end
+                            if (v-a-ab*t).Magnitude<24 then tree:Destroy();removed+=1;break end
                         end
                     end
                 end
