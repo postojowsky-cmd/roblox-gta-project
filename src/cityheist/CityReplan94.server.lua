@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 95.1: distinguish block slabs from traffic lanes")
+print("[CityReplan94] REVISION 96: distributed city density and architectural variety")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -249,7 +249,7 @@ local function part(parent,name,size,cf,color,material,solid)
     p.Parent=parent
     return p
 end
-local function place(source,dest,service)
+local function place(source,dest,service,plot)
     table.clear(rejectReasons)
     local rejected={bounds=0,blocked=0,ground=0,access=0}
     local m=source:Clone()
@@ -265,6 +265,7 @@ local function place(source,dest,service)
         orientations[normal.X~=0 and (normal.X>0 and 1 or 2) or (normal.Z>0 and 3 or 4)]={heading=heading,lo=lo,hi=hi}
     end
     for slotIndex,s in ipairs(slots) do
+        if plot and (s.edge.X<plot.x1-8 or s.edge.X>plot.x2+8 or s.edge.Z<plot.z1-8 or s.edge.Z>plot.z2+8) then continue end
         if slotIndex%100==0 then task.wait() end
         -- +Z points toward the street for parking aisle access.
         local orientation=orientations[s.normal.X~=0 and (s.normal.X>0 and 1 or 2) or (s.normal.Z>0 and 3 or 4)]
@@ -274,7 +275,7 @@ local function place(source,dest,service)
         for _,gap in ipairs(service and {4,9,15,24,36} or {5,12,20,30}) do
         local center=s.edge+s.normal*(depth/2+gap)
         local r={x1=center.X-size.X/2,x2=center.X+size.X/2,z1=center.Z-size.Z/2,z2=center.Z+size.Z/2}
-        if r.x1>=minX and r.x2<=maxX and r.z1>=minZ and r.z2<=maxZ and clear(r,true,2) then
+        if r.x1>=minX and r.x2<=maxX and r.z1>=minZ and r.z2<=maxZ and (not plot or (r.x1>=plot.x1+4 and r.x2<=plot.x2-4 and r.z1>=plot.z1+4 and r.z2<=plot.z2-4)) and clear(r,true,2) then
             local y=flat(r)
             if not y then rejected.ground+=1 end
             local corridor=nil
@@ -359,8 +360,103 @@ end
 if #replaceable==0 then abort("No verified decorative Downtown models; refusing edge-only rebuild");return end
 if centerCount<8 then abort("Only "..centerCount.." new buildings in center; refusing edge-only rebuild");return end
 if total~=28 then abort("Expected 28 buildings, found "..total);return end
+-- Add original, asset-independent architectural models to individual city blocks.
+local rng=Random.new(9601)
+local palettes={
+    Color3.fromRGB(192,183,165),Color3.fromRGB(135,147,155),
+    Color3.fromRGB(155,99,76),Color3.fromRGB(218,215,205),
+    Color3.fromRGB(106,117,128),Color3.fromRGB(171,160,139)
+}
+local types={"Apartment","Office","Townhouse","Retail","Hotel","Warehouse"}
+local function architecture(kind,id,central,compact)
+    local m=Instance.new("Model")
+    m.Name=kind.."_"..string.format("%03d",id)
+    local w=compact and 24 or rng:NextInteger(32,48)
+    local d=compact and 24 or rng:NextInteger(28,42)
+    local floors=kind=="Office" and (central and rng:NextInteger(6,10) or rng:NextInteger(3,5))
+        or kind=="Hotel" and rng:NextInteger(4,6)
+        or kind=="Apartment" and rng:NextInteger(3,5)
+        or kind=="Townhouse" and rng:NextInteger(2,3) or 1
+    local fh=kind=="Warehouse" and 13 or 8
+    local h=floors*fh
+    local wall=palettes[rng:NextInteger(1,#palettes)]
+    local trim=Color3.fromRGB(55,62,68)
+    local glass=Color3.fromRGB(77,119,143)
+    local function p(n,s,x,y,z,col,mat,solid)
+        return part(m,n,s,CFrame.new(x,y,z),col,mat,solid)
+    end
+    p("Foundation",Vector3.new(w+2,.5,d+2),0,.25,0,trim,Enum.Material.Concrete)
+    p("Structure",Vector3.new(w,h,d),0,h/2+.5,0,wall,kind=="Townhouse" and Enum.Material.Brick or Enum.Material.Concrete)
+    p("Roof",Vector3.new(w+1,.8,d+1),0,h+.9,0,trim,Enum.Material.Concrete)
+    for level=1,floors do
+        local y=(level-.5)*fh+.5
+        for _,side in ipairs({-1,1}) do
+            for j=1,math.floor(w/7) do
+                local x=(j-(math.floor(w/7)+1)/2)*7
+                p("WindowFrame",Vector3.new(4.8,5,.22),x,y,side*(d/2+.12),trim,Enum.Material.Metal,false)
+                p("Glazing",Vector3.new(4.2,4.4,.24),x,y,side*(d/2+.28),glass,Enum.Material.Glass,false)
+                if kind=="Apartment" and level>1 and side==1 and j%2==1 then
+                    p("Balcony",Vector3.new(6,.4,3),x,y-2.7,d/2+1.5,wall,Enum.Material.Concrete)
+                    p("BalconyRail",Vector3.new(6,2,.18),x,y-1.5,d/2+3,trim,Enum.Material.Metal)
+                end
+            end
+            for j=1,math.floor(d/8) do
+                local z=(j-(math.floor(d/8)+1)/2)*8
+                p("SideWindow",Vector3.new(.25,4.5,4.5),side*(w/2+.15),y,z,glass,Enum.Material.Glass,false)
+            end
+        end
+        if level>1 then
+            p("FacadeBand",Vector3.new(w+.5,.35,d+.5),0,(level-1)*fh+.5,0,trim,Enum.Material.Concrete,false)
+        end
+    end
+    p("Entrance",Vector3.new(kind=="Warehouse" and 12 or 5,6,.5),0,3.5,d/2+.4,trim,Enum.Material.Metal,false)
+    p("Canopy",Vector3.new(9,.5,3),0,7,d/2+1.5,trim,Enum.Material.Metal)
+    if kind=="Retail" or kind=="Hotel" or kind=="Warehouse" then
+        local sign=p("Sign",Vector3.new(w*.7,2.8,.4),0,math.min(h-1,7.5),d/2+.7,trim,Enum.Material.SmoothPlastic,false)
+        local gui=Instance.new("SurfaceGui");gui.Face=Enum.NormalId.Back;gui.Parent=sign
+        local label=Instance.new("TextLabel");label.Size=UDim2.fromScale(1,1);label.BackgroundTransparency=1;label.TextColor3=Color3.new(1,1,1);label.TextScaled=true;label.Font=Enum.Font.GothamBold
+        label.Text=kind=="Hotel" and "CITY HOTEL" or kind=="Warehouse" and "LOGISTICS" or ({"CAFE","MARKET","BISTRO","PHARMACY"})[id%4+1];label.Parent=gui
+    end
+    if floors>1 then
+        p("RoofEquipment",Vector3.new(8,3,6),w*.2,h+2.5,-d*.2,trim,Enum.Material.Metal)
+    end
+    m.WorldPivot=CFrame.new(0,0,0)
+    return m
+end
+local plots={}
+for _,p in ipairs(roadSurfaces) do
+    if p.Name:lower():find("sidewalk",1,true) and p.Size.X>=100 and p.Size.Z>=100 then
+        local lo,hi=bounds(p);local b=rect(lo,hi)
+        b.name=p.Name
+        b.distance=math.max(math.abs((lo.X+hi.X)/2),math.abs((lo.Z+hi.Z)/2))
+        table.insert(plots,b)
+    end
+end
+table.sort(plots,function(a,b) if a.distance==b.distance then return a.name<b.name end return a.distance>b.distance end)
+local extra=0
+for pass=1,3 do
+    for i,plot in ipairs(plots) do
+        if total>=110 then break end
+        local central=plot.distance<350
+        local kind=types[(i+pass*2-1)%#types+1]
+        if central and kind=="Warehouse" then kind="Office" end
+        if not central and kind=="Office" then kind="Apartment" end
+        local source=architecture(kind,extra+1,central,pass==3)
+        if place(source,groups.CityHeistInfill81,false,plot) then
+            extra+=1;total+=1
+            if central then centerCount+=1 end
+        end
+        source:Destroy()
+        task.wait()
+    end
+end
+groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
+print("[CityReplan94] DENSITY96 extra:",extra,"total:",total,"blocks:",#plots)
 -- Place trees/lights/benches only on verified roadside pockets, reusing saved models.
 local decor=0
+-- Spread existing street details across the map rather than filling the center first.
+local decorRng=Random.new(9602)
+for i=#slots,2,-1 do local j=decorRng:NextInteger(1,i);slots[i],slots[j]=slots[j],slots[i] end
 local details=old[3]:GetChildren()
 local assigned={}
 for detailIndex,obj in ipairs(details) do
