@@ -1703,35 +1703,28 @@ do
                 local u=1-t
                 return a*u^3+b*(3*u*u*t)+c*(3*u*t*t)+d*t^3
             end
-            -- Prefer the outside end of the imported driveway when named in the model.
-            local goal=Vector3.new(x+w/2,base+.8,z)
-            local bestDoor=-math.huge
-            for _,p in ipairs(m:GetDescendants()) do
-                if p:IsA("BasePart") then
-                    local n=p.Name:lower()
-                    if n:find("driveway",1,true) or n:find("drive way",1,true) then
-                        local q=p.Position
-                        local score=q.X-x
-                        if score>bestDoor then bestDoor=score;goal=Vector3.new(x+w/2,base+.8,math.clamp(q.Z,z-d/2+12,z+d/2-12)) end
-                    end
-                end
-            end
-            print("[OwnerMansion117] Current inferred entrance:",goal)
+            -- Measured in server Play at the actual imported entrance (step 118).
+            local goal=Vector3.new(x+82.878527,base+23.809433,z+101.331405)
+            local entranceProbe=RaycastParams.new()
+            entranceProbe.FilterType=Enum.RaycastFilterType.Include
+            entranceProbe.FilterDescendantsInstances={m}
+            local entranceHit=W:Raycast(goal+Vector3.new(0,4,0),Vector3.new(0,-8,0),entranceProbe)
+            if entranceHit then goal=entranceHit.Position end
+            print("[OwnerMansion118] Measured entrance:",goal,entranceHit and entranceHit.Instance:GetFullName())
             for _,a in ipairs(starts) do
                 if path then break end
-                for _,extra in ipairs({100,180,260}) do
-                    local b=Vector3.new(a.X+55,0,z+d/2+extra)
-                    local c=Vector3.new(x+w/2+extra,0,z+d/2+extra)
-                    local e=Vector3.new(x+w/2+extra,0,goal.Z)
+                for _,extra in ipairs({100,180,260,340}) do
+                    -- A single cubic with tangent pointing into the entrance;
+                    -- a straight final approach avoids the previous right-angle joint.
+                    local e=Vector3.new(goal.X+48,0,goal.Z)
+                    local b=Vector3.new(a.X+extra*.75,0,z+d/2+extra)
+                    local c=Vector3.new(e.X+extra,0,e.Z)
                     local points={a}
-                    for i=1,40 do
-                        local t=i/40
-                        local q=bezier(Vector3.new(a.X,0,a.Z),b,c,e,t)
-                        table.insert(points,q)
+                    for i=1,100 do
+                        table.insert(points,bezier(Vector3.new(a.X,0,a.Z),b,c,e,i/100))
                     end
-                    for i=1,16 do
-                        local t=i/16
-                        table.insert(points,e:Lerp(Vector3.new(goal.X,0,goal.Z),t))
+                    for i=1,12 do
+                        table.insert(points,e:Lerp(Vector3.new(goal.X,0,goal.Z),i/12))
                     end
                     local length=0;local distances={0};local ok=true
                     for i=2,#points do
@@ -1741,9 +1734,21 @@ do
                         local rr={x1=math.min(p.X,q.X)-12,x2=math.max(p.X,q.X)+12,z1=math.min(p.Z,q.Z)-12,z2=math.max(p.Z,q.Z)+12}
                         if collision(staticIndex,rr,2) or collision(accessIndex,rr,2) or collision(reservedIndex,rr,0,true) then ok=false;break end
                     end
-                    if ok and length>0 and math.abs(goal.Y-a.Y)/length<=.18 then
-                        for i,p in ipairs(points) do points[i]=Vector3.new(p.X,a.Y+(goal.Y-a.Y)*distances[i]/length,p.Z) end
-                        path=points;break
+                    local ramp=math.min(40,length*.12)
+                    local usable=length-48-ramp
+                    if ok and usable>0 and math.abs(goal.Y-a.Y)/usable<=.18 then
+                        local run=length-48
+                        for i,p in ipairs(points) do
+                            local d=math.min(distances[i],run)
+                            local integral
+                            if d<ramp then integral=d*d/(2*ramp)
+                            elseif d>run-ramp then integral=usable-(run-d)^2/(2*ramp)
+                            else integral=d-ramp/2 end
+                            points[i]=Vector3.new(p.X,a.Y+(goal.Y-a.Y)*integral/usable,p.Z)
+                        end
+                        path=points
+                        print("[OwnerMansion118] Route length:",length,"max grade:",math.abs(goal.Y-a.Y)/usable,"end:",points[#points])
+                        break
                     end
                 end
             end
@@ -1772,8 +1777,8 @@ do
                             local col={x1=px-2,x2=px+2,z1=pz-2,z2=pz+2}
                             if best<38 and not collision(staticIndex,col,1) and not collision(accessIndex,col,1) and not intersects(col,plot,0) then
                                 local old=sample(px,pz) or streetY
-                                local weight=math.clamp((best-16)/22,0,1);weight=weight*weight*(3-2*weight)
-                                local top=(roadY-2.5)*(1-weight)+old*weight
+                                local weight=math.clamp((best-18)/20,0,1);weight=weight*weight*(3-2*weight)
+                                local top=(roadY-4)*(1-weight)+old*weight
                                 for iy=1,#mats[ix] do
                                     local wy=-12+(iy-.5)*4
                                     local fill=math.clamp((top-wy)/4+.5,0,1)
@@ -1795,7 +1800,7 @@ do
                     local cf=CFrame.lookAt(mid,b)
                     local length=(b-a).Magnitude
                     -- Thin deck with a retaining base; terrain is not globally cleared.
-                    local deck=part(drive,"RoadDeck",Vector3.new(20,.8,length+1.0),cf*CFrame.new(0,-.4,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
+                    local deck=part(drive,"RoadDeck",Vector3.new(20,.8,length+1.5),cf*CFrame.new(0,-.4,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
                     deck.CustomPhysicalProperties=PhysicalProperties.new(1,.85,0,1,1)
                     part(drive,"RoadBase",Vector3.new(20,5,length+1),cf*CFrame.new(0,-3.3,0),Color3.fromRGB(100,99,95),Enum.Material.Concrete,false)
                     -- No horizontal collidable cylinders at sloping joints.
