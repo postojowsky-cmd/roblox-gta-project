@@ -937,6 +937,11 @@ end
 local cx,cz=(x1+x2)/2,(z1+z2)/2
 local parkMinZ,parkMaxZ=-520,440
 local parkMaxX=x2+120
+local prisonTerrainRects={}
+for _,name in ipairs({"CityPrison","CityPrisonGenerated"}) do
+    local obj=W:FindFirstChild(name)
+    if obj then local lo,hi=bounds(obj);table.insert(prisonTerrainRects,rect(lo,hi)) end
+end
 local function height(x,z)
     local dx=math.max(x1-x,0,x-x2)
     local dz=math.max(z1-z,0,z-z2)
@@ -951,7 +956,14 @@ local function height(x,z)
     local parkDistance=math.max(maxX+12-x,0,x-parkMaxX,parkMinZ-z,z-parkMaxZ)
     local parkWeight=1-smooth(parkDistance/100)
     local parkColumn={x1=x-2,x2=x+2,z1=z-2,z2=z+2}
-    local parkClear=not collision(staticIndex,parkColumn,4) and not collision(roadIndex,parkColumn,4) and not collision(accessIndex,parkColumn,4) and not collision(reservedIndex,parkColumn,4)
+    local parkClear=false
+    if x>=maxX+12 and parkWeight>0 then
+        parkClear=true
+        for _,r in ipairs(prisonTerrainRects) do
+            if intersects(parkColumn,r,5) then parkClear=false;break end
+        end
+        parkClear=parkClear and not collision(staticIndex,parkColumn,4) and not collision(roadIndex,parkColumn,4) and not collision(accessIndex,parkColumn,4) and not collision(reservedIndex,parkColumn,4)
+    end
     local function parkHeight(h)
         if x>=maxX+12 and parkWeight>0 and parkClear then
             -- Keep the apron flat and make grass terrain outside its edge.
