@@ -160,15 +160,17 @@ local function place(source,dest,service)
         if p:IsA("LuaSourceContainer") then p:Destroy()
         elseif p:IsA("BasePart") then p.Anchored=true end
     end
-    local lastHeading=nil
+    local orientations={}
+    for _,normal in ipairs({Vector3.xAxis,-Vector3.xAxis,Vector3.zAxis,-Vector3.zAxis}) do
+        local heading=CFrame.lookAt(Vector3.zero,normal)
+        m:PivotTo(heading)
+        local lo,hi=bounds(m)
+        orientations[normal.X~=0 and (normal.X>0 and 1 or 2) or (normal.Z>0 and 3 or 4)]={heading=heading,lo=lo,hi=hi}
+    end
     for _,s in ipairs(slots) do
         -- +Z points toward the street for parking aisle access.
-        local heading=CFrame.lookAt(Vector3.zero,s.normal)
-        if lastHeading~=s.normal then
-            m:PivotTo(heading)
-            lastHeading=s.normal
-        end
-        local lo,hi=bounds(m)
+        local orientation=orientations[s.normal.X~=0 and (s.normal.X>0 and 1 or 2) or (s.normal.Z>0 and 3 or 4)]
+        local lo,hi=orientation.lo,orientation.hi
         local size=hi-lo
         local depth=s.normal.X~=0 and size.X or size.Z
         local gap=service and 9 or 12
@@ -188,7 +190,7 @@ local function place(source,dest,service)
             end
             if y then
                 local delta=Vector3.new(center.X-(lo.X+hi.X)/2,y-lo.Y+.05,center.Z-(lo.Z+hi.Z)/2)
-                m:PivotTo(m:GetPivot()+delta)
+                m:PivotTo(orientation.heading+delta)
                 m.Parent=dest
                 table.insert(reserved,r)
                 if corridor then
