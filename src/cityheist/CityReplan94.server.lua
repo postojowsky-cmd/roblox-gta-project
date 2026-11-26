@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 103: official forest pack import fix")
+print("[CityReplan94] REVISION 104: public edge landscaping and safe road ends")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1018,6 +1018,87 @@ if x2-x1<4000 and z2-z1<4000 then
         end
     end
     print("[CityReplan94] LANDSCAPE102 continuous foothills complete:",chunks)
+    -- Step 104: public green pockets and safe turnarounds on the city apron.
+    do
+        local edge=Instance.new("Folder");edge.Name="CityEdge104";edge.Parent=foundation
+        local green=Color3.fromRGB(83,113,60)
+        local asphalt=Color3.fromRGB(62,64,68)
+        local function box(x,z,w,d)
+            return {x1=x-w/2,x2=x+w/2,z1=z-d/2,z2=z+d/2}
+        end
+        local probe=RaycastParams.new()
+        probe.FilterType=Enum.RaycastFilterType.Include
+        probe.FilterDescendantsInstances={ground,terrain,foundation.ContinuousCityFoundation}
+        local function level(x,z,w,d)
+            local y
+            for _,dx in ipairs({-w/2,0,w/2}) do
+                for _,dz in ipairs({-d/2,0,d/2}) do
+                    local hit=W:Raycast(Vector3.new(x+dx,400,z+dz),Vector3.new(0,-430,0),probe)
+                    if not hit or hit.Normal.Y<.95 or math.abs(hit.Position.Y-streetY)>1.2 then return nil end
+                    if y and math.abs(hit.Position.Y-y)>.6 then return nil end
+                    y=math.max(y or -math.huge,hit.Position.Y)
+                end
+            end
+            return y
+        end
+        local function safe(r,pad)
+            return not collision(staticIndex,r,pad) and not collision(reservedIndex,r,pad)
+                and not collision(accessIndex,r,pad)
+        end
+        local caps,parks=0,0
+        for _,s in ipairs(segments) do
+            for _,sign in ipairs({-1,1}) do
+                local axis=s.horizontal and (sign==1 and s.x2 or s.x1) or (sign==1 and s.z2 or s.z1)
+                local cross=s.horizontal and (s.z1+s.z2)/2 or (s.x1+s.x2)/2
+                local outerEnd=s.horizontal and (sign==1 and maxX or minX) or (sign==1 and maxZ or minZ)
+                if math.abs(axis-outerEnd)>30 then continue end
+                local x,z=s.horizontal and axis or cross,s.horizontal and cross or axis
+                local w=math.max(36,(s.horizontal and s.z2-s.z1 or s.x2-s.x1)+8)
+                local px,pz=x+(s.horizontal and sign*8 or 0),z+(s.horizontal and 0 or sign*8)
+                local rr=box(px,pz,w,w)
+                if rr.x1<x1 or rr.x2>x2 or rr.z1<z1 or rr.z2>z2 then continue end
+                local connected=false
+                for _,other in ipairs(roadRects) do
+                    if other~=s and intersects(rr,other,0) then connected=true;break end
+                end
+                if connected or not safe(rr,1) then continue end
+                local y=level(px,pz,w,w)
+                if not y or math.abs(y-s.y)>.8 then continue end
+                part(edge,"Turnaround",Vector3.new(w,.3,w),CFrame.new(px,s.y-.15,pz),asphalt,Enum.Material.Asphalt,true)
+                indexRect(roadIndex,rr);reserve(rr);caps+=1
+            end
+        end
+        for x=math.ceil((x1+28)/58)*58,x2-28,58 do
+            for z=math.ceil((z1+28)/58)*58,z2-28,58 do
+                if parks>=65 then break end
+                if x>minX+120 and x<maxX-120 and z>minZ+120 and z<maxZ-120 then continue end
+                local rr=box(x,z,50,50)
+                if not safe(rr,3) or collision(roadIndex,rr,4) then continue end
+                local y=level(x,z,50,50)
+                if not y then continue end
+                local lawn=part(edge,"PocketGreen",Vector3.new(50,.25,50),CFrame.new(x,y+.125,z),green,Enum.Material.Grass,true)
+                local pathColor=Color3.fromRGB(178,174,160)
+                part(edge,"GardenPath",Vector3.new(5,.12,48),CFrame.new(x,y+.31,z),pathColor,Enum.Material.Concrete,true)
+                part(edge,"GardenPath",Vector3.new(48,.12,5),CFrame.new(x,y+.31,z),pathColor,Enum.Material.Concrete,true)
+                for _,side in ipairs({-1,1}) do
+                    local bx=x+side*14
+                    part(edge,"BenchSeat",Vector3.new(9,.6,2.2),CFrame.new(bx,y+2,z+5),Color3.fromRGB(110,78,49),Enum.Material.Wood,true)
+                    part(edge,"BenchBack",Vector3.new(9,2,.4),CFrame.new(bx,y+3,z+6),Color3.fromRGB(110,78,49),Enum.Material.Wood,true)
+                    for _,d in ipairs({-3,3}) do
+                        part(edge,"BenchLeg",Vector3.new(.8,1.7,1.6),CFrame.new(bx+d,y+1,z+5),Color3.fromRGB(50,52,53),Enum.Material.Metal,true)
+                    end
+                    for _,dz in ipairs({-16,16}) do
+                        local shrub=part(edge,"Shrub",Vector3.new(7,4,7),CFrame.new(bx,y+2,z+dz),Color3.fromRGB(55,91,43),Enum.Material.Grass,false)
+                        shrub.Shape=Enum.PartType.Ball
+                    end
+                end
+                reserve(rr);parks+=1
+            end
+            task.wait()
+        end
+        print("[CityReplan94] EDGE104 parks:",parks,"turnarounds:",caps)
+    end
+
     -- Import public Creator Store packs in Studio only. Never execute asset scripts.
     do
         local AS=game:GetService("AssetService")
