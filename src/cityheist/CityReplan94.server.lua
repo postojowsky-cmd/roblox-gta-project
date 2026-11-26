@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 114: connected prison-side park and full-size local mansion")
+print("[CityReplan94] REVISION 115: estate foundation, graded winding access, door collision audit and park expansion")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -935,8 +935,8 @@ for _,p in ipairs(groundParts) do
     end
 end
 local cx,cz=(x1+x2)/2,(z1+z2)/2
-local parkMinZ,parkMaxZ=-520,440
-local parkMaxX=x2+120
+local parkMinZ,parkMaxZ=-650,510
+local parkMaxX=x2+180
 local prisonTerrainRects={}
 for _,name in ipairs({"CityPrison","CityPrisonGenerated"}) do
     local obj=W:FindFirstChild(name)
@@ -1210,7 +1210,19 @@ if x2-x1<4000 and z2-z1<4000 then
             local rr=box(px,pz,w or cell,d or cell)
             if px<maxX+12 or px>parkMaxX or pz<parkMinZ or pz>parkMaxZ then return nil end
             if not safe(rr,4) or collision(roadIndex,rr,4) then return nil end
-            return level(px,pz,w or cell,d or cell)
+            local y=level(px,pz,w or cell,d or cell)
+            if y then return y end
+            -- Accept gentle grass slopes, not steep mountain faces.
+            local low,high=math.huge,-math.huge
+            for _,dx in ipairs({-(w or cell)/2,0,(w or cell)/2}) do
+                for _,dz in ipairs({-(d or cell)/2,0,(d or cell)/2}) do
+                    local hit=W:Raycast(Vector3.new(px+dx,400,pz+dz),Vector3.new(0,-430,0),probe)
+                    if not hit or hit.Normal.Y<.94 then return nil end
+                    low=math.min(low,hit.Position.Y);high=math.max(high,hit.Position.Y)
+                end
+            end
+            if high-low<=.65 and high<streetY+12 then return high end
+            return nil
         end
         local sites={}
         for px=math.max(maxX+12,x1+cell/2),parkMaxX-cell/2,cell do
@@ -1274,7 +1286,7 @@ if x2-x1<4000 and z2-z1<4000 then
         end
         route(function(t)return maxX+48+13*math.sin(t/68),t end,parkMinZ+24,parkMaxZ-24,8)
         route(function(t)return x2+65+10*math.sin(t/85),t end,parkMinZ+24,parkMaxZ-24,8)
-        for _,zz in ipairs({-450,-390,215,335,400}) do
+        for _,zz in ipairs({-590,-450,-390,215,335,400,470}) do
             route(function(t)return t,zz+8*math.sin(t/47) end,maxX+20,parkMaxX-20,7)
         end
         -- Furniture faces the nearest promenade, never the roadway.
@@ -1314,7 +1326,7 @@ if x2-x1<4000 and z2-z1<4000 then
         local trees={}
         local benches,lamps,fountains=0,0,0
         for _,p in ipairs(sites) do
-            if fountains>=4 then break end
+            if fountains>=6 then break end
             if near(p,pathPoints,17) and not near(p,plazas,105) and available(p.X,p.Z,38,38) then fountain(p);fountains+=1 end
         end
         for _,p in ipairs(sites) do
@@ -1558,9 +1570,9 @@ do
         else
             local estate=Instance.new("Folder");estate.Name="CityOwnerEstate105";estate.Parent=W
             -- Level only the selected plot; leave the rest of the mountain untouched.
-            local base=math.floor(y/4)*4
+            local base=math.floor(math.min(y,streetY+100)/4)*4
             -- Sample first, then blend the terrace into its natural surroundings.
-            local blend=100
+            local blend=220
             local region=Region3.new(Vector3.new(x-w/2-blend,-12,z-d/2-blend),Vector3.new(x+w/2+blend,320,z+d/2+blend)):ExpandToGrid(4)
             local mats,occ=W.Terrain:ReadVoxels(region,4)
             local origin=region.CFrame.Position-region.Size/2
@@ -1571,17 +1583,19 @@ do
                     local dx=math.max(math.abs(px-x)-w/2,0)
                     local dz=math.max(math.abs(pz-z)-d/2,0)
                     local dist=math.sqrt(dx*dx+dz*dz)
+                    local rounded=math.sqrt(((px-x)/(w/2+35))^2+((pz-z)/(d/2+35))^2)
+                    if dx>0 or dz>0 then dist=math.max(dist,(rounded-1)*95) end
                     if dist>=blend then continue end
                     local rr={x1=px-2,x2=px+2,z1=pz-2,z2=pz+2}
                     if collision(staticIndex,rr,3) or collision(roadIndex,rr,3) or collision(accessIndex,rr,3) or collision(reservedIndex,rr,3) then continue end
                     local h=sample(px,pz)
                     if not h then continue end
                     local t=dist/blend;t=t*t*(3-2*t)
-                    local top=(base-.15)*(1-t)+h*t
+                    local top=(base-.35)*(1-t)+h*t
                     for iy=1,#mats[ix] do
                         local wy=origin.Y+(iy-.5)*4
                         local fill=math.clamp((top-wy)/4+.5,0,1)
-                        if wy>=math.min(h,top)-8 then
+                        if wy>=-10 then
                             occ[ix][iy][iz]=fill
                             mats[ix][iy][iz]=fill>0 and Enum.Material.Grass or Enum.Material.Air
                         end
@@ -1590,9 +1604,30 @@ do
                 if ix%12==0 then task.wait() end
             end
             W.Terrain:WriteVoxels(region,4,mats,occ)
+            -- Solid foundation extends down into the graded hill, not a floating thin plate.
+            part(estate,"EstateFoundation",Vector3.new(w-6,8,d-6),CFrame.new(x,base-4,z),Color3.fromRGB(120,120,115),Enum.Material.Concrete,true)
             part(estate,"EstateTerrace",Vector3.new(w,.8,d),CFrame.new(x,base+.4,z),Color3.fromRGB(173,169,158),Enum.Material.Concrete,true)
             m:PivotTo(m:GetPivot()+Vector3.new(x-(lo.X+hi.X)/2,base+.8-lo.Y,z-(lo.Z+hi.Z)/2))
             m.Parent=estate
+            local opened=0
+            for _,p in ipairs(m:GetDescendants()) do
+                if not p:IsA("BasePart") then continue end
+                local n=p.Name:lower()
+                local a=p.Parent
+                local door=n:find("door",1,true) or n:find("gate",1,true) or n:find("drzwi",1,true)
+                while a and a~=m do
+                    local an=a.Name:lower()
+                    if an:find("door",1,true) or an:find("gate",1,true) then door=true end
+                    a=a.Parent
+                end
+                local frame=n:find("frame",1,true) or n:find("jamb",1,true) or n:find("floor",1,true) or n:find("wall",1,true) or n:find("threshold",1,true)
+                local thin=math.min(p.Size.X,p.Size.Z)
+                if door and not frame and p.Size.Y>=2 and thin<=math.max(p.Size.X,p.Size.Z)*.45 then
+                    p.CanCollide=false;p.CanTouch=false;opened+=1
+                    print("[OwnerMansion115] Door passage:",p:GetFullName(),p.Size)
+                end
+            end
+            print("[OwnerMansion115] Door collision parts disabled:",opened)
             local forest=landscape:FindFirstChild("MountainForest102")
             local removed=0
             local function clearTrees(r)
@@ -1605,67 +1640,94 @@ do
                 end
             end
             clearTrees(plot)
-            -- Find an east-facing city street end and a terrain-following route.
+            -- Build a graded, winding approach around the southern side of the hill.
+            -- Choose a real street endpoint, then test the whole corridor against city objects.
             local starts={}
-            for _,s in ipairs(segments) do
-                if s.horizontal and s.x2>=maxX-30 then
-                    local sz=(s.z1+s.z2)/2
-                    if sz>350 then table.insert(starts,Vector3.new(s.x2-2,s.y,sz)) end
+            for _,seg in ipairs(segments) do
+                if seg.horizontal and seg.x2>=maxX-30 then
+                    local sz=(seg.z1+seg.z2)/2
+                    if sz>300 then table.insert(starts,Vector3.new(seg.x2-2,seg.y,sz)) end
                 end
             end
             table.sort(starts,function(a,b)return math.abs(a.Z-z)<math.abs(b.Z-z) end)
-            local goal=Vector3.new(x-w/2,base+.8,z)
-            local path=nil
-            local spacing=16
-            -- Bounded Dijkstra search, using only clear, moderate-grade terrain cells.
-            for _,start in ipairs(starts) do
-                local nodes,open={},{}
-                local function node(ix,iz)
-                    local key=ix..":"..iz
-                    if nodes[key]~=nil then return nodes[key] or nil end
-                    local px,pz=start.X+ix*spacing,start.Z+iz*spacing
-                    if px<start.X or px>x+180 or pz<360 or pz>z+300 then nodes[key]=false;return nil end
-                    local rr={x1=px-11,x2=px+11,z1=pz-11,z2=pz+11}
-                    if collision(staticIndex,rr,2) or collision(reservedIndex,rr,0,true) or collision(accessIndex,rr,2) then nodes[key]=false;return nil end
-                    local h=sample(px,pz)
-                    if not h then nodes[key]=false;return nil end
-                    local n={ix=ix,iz=iz,p=Vector3.new(px,h+.25,pz),cost=math.huge}
-                    nodes[key]=n;return n
-                end
-                local first={ix=0,iz=0,p=start,cost=0}
-                nodes["0:0"]=first;table.insert(open,first)
-                local iterations=0
-                while #open>0 and iterations<4500 do
-                    local best=1
-                    for j=2,#open do if open[j].cost<open[best].cost then best=j end end
-                    local a=table.remove(open,best)
-                    if a.closed then continue end
-                    a.closed=true;iterations+=1
-                    local delta=goal-a.p
-                    local horizontal=Vector2.new(delta.X,delta.Z).Magnitude
-                    if horizontal<=spacing*1.5 and horizontal>1 and math.abs(delta.Y)/horizontal<=.25 then
-                        path={goal};local q=a
-                        while q do table.insert(path,1,q.p);q=q.prev end
-                        break
+            local path
+            local function bezier(a,b,c,d,t)
+                local u=1-t
+                return a*u^3+b*(3*u*u*t)+c*(3*u*t*t)+d*t^3
+            end
+            -- Prefer the outside end of the imported driveway when named in the model.
+            local goal=Vector3.new(x+w/2,base+.8,z)
+            local bestDoor=-math.huge
+            for _,p in ipairs(m:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    local n=p.Name:lower()
+                    if n:find("driveway",1,true) or n:find("drive way",1,true) then
+                        local q=p.Position
+                        local score=q.X-x
+                        if score>bestDoor then bestDoor=score;goal=Vector3.new(x+w/2,base+.8,math.clamp(q.Z,z-d/2+12,z+d/2-12)) end
                     end
-                    for _,dir in ipairs({{1,0},{-1,0},{0,1},{0,-1},{1,1},{1,-1},{-1,1},{-1,-1}}) do
-                        local b=node(a.ix+dir[1],a.iz+dir[2])
-                        if not b or b.closed then continue end
-                        local v=b.p-a.p
-                        local run=Vector2.new(v.X,v.Z).Magnitude
-                        local grade=math.abs(v.Y)/run
-                        if grade>.25 then continue end
-                        local mid=(a.p+b.p)/2
-                        local rr={x1=mid.X-11,x2=mid.X+11,z1=mid.Z-11,z2=mid.Z+11}
-                        if collision(staticIndex,rr,2) or collision(reservedIndex,rr,0,true) or collision(accessIndex,rr,2) then continue end
-                        local mh=sample(mid.X,mid.Z)
-                        if not mh or math.abs(mh-mid.Y)>3 then continue end
-                        local cost=a.cost+run*(1+grade*4)
-                        if cost<b.cost then b.cost=cost;b.prev=a;table.insert(open,b) end
-                    end
-                    if iterations%150==0 then task.wait() end
                 end
+            end
+            for _,a in ipairs(starts) do
                 if path then break end
+                for _,extra in ipairs({100,180,260}) do
+                    local b=Vector3.new(a.X+55,0,z+d/2+extra)
+                    local c=Vector3.new(x+w/2+extra,0,z+d/2+extra)
+                    local e=Vector3.new(x+w/2+extra,0,goal.Z)
+                    local points={a}
+                    for i=1,40 do
+                        local t=i/40
+                        local q=bezier(Vector3.new(a.X,0,a.Z),b,c,e,t)
+                        table.insert(points,q)
+                    end
+                    for i=1,16 do
+                        local t=i/16
+                        table.insert(points,e:Lerp(Vector3.new(goal.X,0,goal.Z),t))
+                    end
+                    local length=0;local distances={0};local ok=true
+                    for i=2,#points do
+                        local p,q=points[i-1],points[i]
+                        length+=Vector2.new(q.X-p.X,q.Z-p.Z).Magnitude
+                        distances[i]=length
+                        local rr={x1=math.min(p.X,q.X)-12,x2=math.max(p.X,q.X)+12,z1=math.min(p.Z,q.Z)-12,z2=math.max(p.Z,q.Z)+12}
+                        if collision(staticIndex,rr,2) or collision(accessIndex,rr,2) or collision(reservedIndex,rr,0,true) then ok=false;break end
+                    end
+                    if ok and length>0 and math.abs(goal.Y-a.Y)/length<=.18 then
+                        for i,p in ipairs(points) do points[i]=Vector3.new(p.X,a.Y+(goal.Y-a.Y)*distances[i]/length,p.Z) end
+                        path=points;break
+                    end
+                end
+            end
+            if path then
+                -- Cut and fill a continuous road bed, with feathered shoulders.
+                for j=1,#path-1 do
+                    local a,b=path[j],path[j+1]
+                    local mid=(a+b)/2
+                    local rr=Region3.new(Vector3.new(math.min(a.X,b.X)-25,-12,math.min(a.Z,b.Z)-25),Vector3.new(math.max(a.X,b.X)+25,320,math.max(a.Z,b.Z)+25)):ExpandToGrid(4)
+                    local mats,occ=W.Terrain:ReadVoxels(rr,4)
+                    local origin=rr.CFrame.Position-rr.Size/2
+                    local av,bv=Vector2.new(a.X,a.Z),Vector2.new(b.X,b.Z)
+                    local ab=bv-av
+                    for ix=1,#mats do for iz=1,#mats[ix][1] do
+                        local px,pz=origin.X+(ix-.5)*4,origin.Z+(iz-.5)*4
+                        local v=Vector2.new(px,pz)
+                        local t=math.clamp((v-av):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)
+                        local dist=(v-av-ab*t).Magnitude
+                        local col={x1=px-2,x2=px+2,z1=pz-2,z2=pz+2}
+                        if dist<23 and not collision(staticIndex,col,3) and not collision(accessIndex,col,3) and not collision(roadIndex,col,2) and not intersects(col,plot,0) then
+                            local old=sample(px,pz) or streetY
+                            local weight=math.clamp((dist-10)/13,0,1);weight=weight*weight*(3-2*weight)
+                            local top=(a.Y+(b.Y-a.Y)*t-.6)*(1-weight)+old*weight
+                            for iy=1,#mats[ix] do
+                                local wy=origin.Y+(iy-.5)*4
+                                local fill=math.clamp((top-wy)/4+.5,0,1)
+                                occ[ix][iy][iz]=fill;mats[ix][iy][iz]=fill>0 and Enum.Material.Grass or Enum.Material.Air
+                            end
+                        end
+                    end end
+                    W.Terrain:WriteVoxels(rr,4,mats,occ)
+                    if j%8==0 then task.wait() end
+                end
             end
             if path then
                 local drive=Instance.new("Folder");drive.Name="MountainDriveway";drive.Parent=estate
@@ -1699,7 +1761,7 @@ do
                 end
                 print("[OwnerMansion105] DRIVEWAY segments:",#path-1)
             else
-                warn("[OwnerMansion105] No safe driveway under 25% grade; mansion placed, road needs grading")
+                warn("[OwnerMansion115] No clear curved route under 18% grade; need exact street and driveway coordinates")
             end
             print("[OwnerMansion105] PLACED:",x,base,z,"footprint:",w,d,"trees removed:",removed)
         end
