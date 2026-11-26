@@ -1837,10 +1837,38 @@ do
                         end
                     end
                 end
+                -- Trim only terrain protruding through the street connection.
+                local start=path[1]
+                local region=Region3.new(start+Vector3.new(-44,-12,-44),start+Vector3.new(44,20,44)):ExpandToGrid(4)
+                local mm,oo=W.Terrain:ReadVoxels(region,4)
+                local origin=region.CFrame.Position-region.Size/2
+                for ix=1,#mm do for iz=1,#mm[ix][1] do
+                    local v=Vector2.new(origin.X+(ix-.5)*4,origin.Z+(iz-.5)*4)
+                    local best,yy=math.huge,start.Y
+                    for j=1,math.min(10,#path-1) do
+                        local a,b=path[j],path[j+1]
+                        local av,bv=Vector2.new(a.X,a.Z),Vector2.new(b.X,b.Z)
+                        local ab=bv-av
+                        local t=math.clamp((v-av):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)
+                        local dist=(v-av-ab*t).Magnitude
+                        if dist<best then best=dist;yy=a.Y+(b.Y-a.Y)*t end
+                    end
+                    if best<12 then
+                        for iy=1,#mm[ix] do
+                            local wy=origin.Y+(iy-.5)*4
+                            local cap=math.clamp((yy-2-wy)/4+.5,0,1)
+                            if oo[ix][iy][iz]>cap then
+                                oo[ix][iy][iz]=cap
+                                if cap==0 then mm[ix][iy][iz]=Enum.Material.Air else mm[ix][iy][iz]=Enum.Material.Ground end
+                            end
+                        end
+                    end
+                end end
+                W.Terrain:WriteVoxels(region,4,mm,oo)
                 local gateCF=atDistance(32)
                 for _,side in ipairs({-1,1}) do
                     local cf=gateCF*CFrame.new(side*12,0,0)
-                    part(entry,"GatePillar",Vector3.new(3,9,3),cf*CFrame.new(0,4.5,0),stone,Enum.Material.Slate,true)
+                    part(entry,"GatePillar",Vector3.new(3,15,3),cf*CFrame.new(0,1.5,0),stone,Enum.Material.Slate,true)
                     part(entry,"PillarCap",Vector3.new(3.6,.6,3.6),cf*CFrame.new(0,9,0),iron,Enum.Material.Metal,true)
                     local lamp=part(entry,"Lantern",Vector3.new(1.4,1.6,1.4),cf*CFrame.new(0,10,0),Color3.fromRGB(255,221,159),Enum.Material.Neon,false)
                     local light=Instance.new("PointLight");light.Color=lamp.Color;light.Range=24;light.Brightness=1.4;light.Parent=lamp
