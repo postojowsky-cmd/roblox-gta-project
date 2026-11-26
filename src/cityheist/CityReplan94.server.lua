@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 97: continuous foundation and irregular mountain foothills")
+print("[CityReplan94] REVISION 98: outer residential districts and courtyard infill")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -452,6 +452,120 @@ for pass=1,3 do
 end
 groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
 print("[CityReplan94] DENSITY96 extra:",extra,"total:",total,"blocks:",#plots)
+-- Step 98: fill unused interiors of outer plots, not just roadside strips.
+local residentialRng=Random.new(9801)
+local function residential(kind,id)
+    local m=Instance.new("Model")
+    m.Name=kind.."_"..string.format("%03d",id)
+    local house=kind=="DetachedHouse"
+    local block=kind=="CourtyardBlock"
+    local w=house and residentialRng:NextInteger(20,26) or block and 42 or 28
+    local d=house and 22 or block and 24 or 26
+    local floors=house and residentialRng:NextInteger(1,2) or block and residentialRng:NextInteger(4,6) or 3
+    local h=floors*8
+    local wall=palettes[residentialRng:NextInteger(1,#palettes)]
+    local trim=Color3.fromRGB(62,66,70)
+    local glass=Color3.fromRGB(74,110,132)
+    local function p(n,s,x,y,z,col,mat,solid,rot)
+        return part(m,n,s,CFrame.new(x,y,z)*(rot or CFrame.identity),col,mat,solid)
+    end
+    p("Lot",Vector3.new(w+8,.35,d+12),0,.175,2,house and Color3.fromRGB(91,117,71) or Color3.fromRGB(151,151,146),house and Enum.Material.Grass or Enum.Material.Concrete)
+    p("Building",Vector3.new(w,h,d),0,h/2+.35,0,wall,block and Enum.Material.Brick or Enum.Material.Concrete)
+    if house then
+        local rise=5
+        local half=w/2+1
+        local slope=math.atan2(rise,half)
+        local roofColor=({Color3.fromRGB(94,53,42),trim,Color3.fromRGB(113,78,62)})[id%3+1]
+        for _,s in ipairs({-1,1}) do
+            p("PitchedRoof",Vector3.new(math.sqrt(half^2+rise^2),.65,d+2),s*half/2,h+.35+rise/2,0,roofColor,Enum.Material.Slate,true,CFrame.Angles(0,0,-s*slope))
+            local gable=Instance.new("WedgePart")
+            gable.Name="Gable";gable.Anchored=true;gable.Size=Vector3.new(d,rise,w/2)
+            gable.Color=wall;gable.Material=Enum.Material.Brick
+            gable.CFrame=CFrame.new(s*w/4,h+.35+rise/2,0)*CFrame.Angles(0,-s*math.pi/2,0)
+            gable.Parent=m
+        end
+        p("Chimney",Vector3.new(2.5,5,2.5),w*.22,h+4,-d*.22,wall,Enum.Material.Brick)
+        p("FrontWalk",Vector3.new(4,.12,7),0,.42,d/2+3,trim,Enum.Material.Concrete)
+        p("GarageDoor",Vector3.new(7,5,.25),-w*.26,3,d/2+.15,trim,Enum.Material.Metal,false)
+    else
+        p("FlatRoof",Vector3.new(w+1,.8,d+1),0,h+.75,0,trim,Enum.Material.Concrete)
+        p("RoofPlant",Vector3.new(7,2.5,5),w*.25,h+2,-d*.2,trim,Enum.Material.Metal)
+    end
+    for level=1,floors do
+        local y=(level-.5)*8+.35
+        for _,s in ipairs({-1,1}) do
+            for j=1,math.floor(w/7) do
+                local x=(j-(math.floor(w/7)+1)/2)*7
+                if not (level==1 and s==1 and (math.abs(x)<3 or (house and x<0))) then
+                    p("WindowFrame",Vector3.new(4.8,4.8,.2),x,y,s*(d/2+.13),trim,Enum.Material.Metal,false)
+                    p("Window",Vector3.new(4.1,4.1,.22),x,y,s*(d/2+.27),glass,Enum.Material.Glass,false)
+                end
+                if block and level>1 and j%2==1 then
+                    p("Balcony",Vector3.new(6,.35,3),x,y-2.5,s*(d/2+1.5),trim,Enum.Material.Concrete)
+                    p("Rail",Vector3.new(6,1.8,.18),x,y-1.45,s*(d/2+3),trim,Enum.Material.Metal)
+                end
+            end
+            for j=1,math.floor(d/8) do
+                local z=(j-(math.floor(d/8)+1)/2)*8
+                p("SideWindow",Vector3.new(.24,4,4),s*(w/2+.15),y,z,glass,Enum.Material.Glass,false)
+            end
+        end
+        if block and level>1 then
+            p("FloorBand",Vector3.new(w+.4,.3,d+.4),0,(level-1)*8+.35,0,Color3.fromRGB(184,179,168),Enum.Material.Concrete,false)
+        end
+    end
+    p("Entry",Vector3.new(4.5,6,.3),0,3.35,d/2+.2,trim,Enum.Material.Metal,false)
+    p("EntryCanopy",Vector3.new(6,.35,2),0,6.7,d/2+1,trim,Enum.Material.Metal)
+    m.WorldPivot=CFrame.identity
+    return m
+end
+local function placeInterior(m,plot,house)
+    local lo,hi=bounds(m)
+    local sx,sz=hi.X-lo.X,hi.Z-lo.Z
+    local candidates={}
+    for x=plot.x1+9+sx/2,plot.x2-9-sx/2,8 do
+        for z=plot.z1+9+sz/2,plot.z2-9-sz/2,8 do
+            local cx,cz=(plot.x1+plot.x2)/2,(plot.z1+plot.z2)/2
+            local distance=math.abs(x-cx)+math.abs(z-cz)
+            table.insert(candidates,{x=x,z=z,score=house and -distance or distance})
+        end
+    end
+    table.sort(candidates,function(a,b) if a.score==b.score then if a.x==b.x then return a.z<b.z end return a.x<b.x end return a.score<b.score end)
+    for _,v in ipairs(candidates) do
+        local r={x1=v.x-sx/2,x2=v.x+sx/2,z1=v.z-sz/2,z2=v.z+sz/2}
+        if clear(r,true,house and 3 or 5) then
+            local y=flat(r)
+            if y then
+                m:PivotTo(CFrame.new(v.x-(lo.X+hi.X)/2,y-lo.Y+.05,v.z-(lo.Z+hi.Z)/2))
+                m.Parent=groups.CityHeistInfill81
+                reserve(r)
+                return true
+            end
+        end
+    end
+    return false
+end
+local added98=0
+local counts98={DetachedHouse=0,CourtyardBlock=0,NeighborhoodApartment=0}
+-- Outer corner neighborhoods favor houses; outer side blocks favor brick apartments.
+-- Reserve a generous gap between buildings and leave existing gameplay parcels intact.
+for pass=1,4 do
+    for _,plot in ipairs(plots) do
+        if plot.distance<350 or added98>=80 then continue end
+        local px,pz=(plot.x1+plot.x2)/2,(plot.z1+plot.z2)/2
+        local corner=math.abs(px)>350 and math.abs(pz)>350
+        local kind=corner and "DetachedHouse" or (pass<=2 and "CourtyardBlock" or "NeighborhoodApartment")
+        local m=residential(kind,added98+1)
+        if placeInterior(m,plot,kind=="DetachedHouse") then
+            added98+=1;total+=1;counts98[kind]+=1
+        else
+            m:Destroy()
+        end
+        task.wait()
+    end
+end
+groups.CityHeistInfill81:SetAttribute("BuildingCount",#groups.CityHeistInfill81:GetChildren())
+print(string.format("[CityReplan94] DISTRICTS98 added=%d houses=%d blocks=%d apartments=%d total=%d",added98,counts98.DetachedHouse,counts98.CourtyardBlock,counts98.NeighborhoodApartment,total))
 -- Place trees/lights/benches only on verified roadside pockets, reusing saved models.
 local decor=0
 -- Spread existing street details across the map rather than filling the center first.
