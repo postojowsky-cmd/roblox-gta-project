@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 111: prison exclusion, continuous park terrain, local mansion only")
+print("[CityReplan94] REVISION 112: restore park layout, protect prison walls only, preserve paths")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -237,18 +237,6 @@ for i,b in ipairs(static) do
     if i%300==0 then task.wait() end
 end
 for _,b in ipairs(roadRects) do indexRect(roadIndex,b) end
--- Protect the complete compound, including empty courtyards between walls.
-for _,name in ipairs({"CityPrison","CityPrisonGenerated"}) do
-    local obj=W:FindFirstChild(name)
-    if obj then
-        local lo,hi=bounds(obj)
-        if lo.X<hi.X and lo.Z<hi.Z then
-            local rr=rect(lo,hi);rr.name=name.." protected compound"
-            indexRect(staticIndex,rr)
-            print("[CityReplan94] PRISON111 protected:",name,rr.x1,rr.x2,rr.z1,rr.z2)
-        end
-    end
-end
 local function reserve(b)
     table.insert(reserved,b)
     indexRect(reservedIndex,b)
@@ -1053,8 +1041,45 @@ if x2-x1<4000 and z2-z1<4000 then
             end
             return y
         end
+        -- The prison model includes a huge apron; only the actual enclosing
+        -- walls define the restricted park footprint.
+        local prisonRect
+        local prison=W:FindFirstChild("CityPrison")
+        if prison then
+            local lo=Vector3.new(math.huge,math.huge,math.huge);local hi=-lo
+            local wallCount=0
+            for _,p in ipairs(prison:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    local n=p.Name:lower()
+                    local l,h=bounds(p)
+                    local dx,dz=h.X-l.X,h.Z-l.Z
+                    if (n:find("wall",1,true) or n:find("fence",1,true)) and h.Y-l.Y>=6 and math.max(dx,dz)>=30 and math.min(dx,dz)<=18 then
+                        lo=Vector3.new(math.min(lo.X,l.X),math.min(lo.Y,l.Y),math.min(lo.Z,l.Z))
+                        hi=Vector3.new(math.max(hi.X,h.X),math.max(hi.Y,h.Y),math.max(hi.Z,h.Z))
+                        wallCount+=1
+                    end
+                end
+            end
+            if wallCount>=3 and hi.X-lo.X>=40 and hi.Z-lo.Z>=40 then
+                prisonRect=rect(lo,hi)
+                print("[CityReplan94] PRISON112 wall bounds:",wallCount,lo,hi)
+            else
+                -- No guessing from the apron: report the actual parts for diagnosis.
+                warn("[CityReplan94] PRISON112 wall bounds unresolved:",wallCount)
+                for _,p in ipairs(prison:GetDescendants()) do
+                    if p:IsA("BasePart") and p.Size.Y>=6 and math.max(p.Size.X,p.Size.Z)>=30 then
+                        print("[CityReplan94] PRISON112 candidate:",p.Name,p.Position,p.Size)
+                    end
+                end
+                -- Fail closed for the park only until the wall geometry is identified.
+                local l,h=bounds(prison);prisonRect=rect(l,h)
+            end
+        end
+        local function prisonBlocked(r,pad)
+            return prisonRect and intersects(r,prisonRect,pad)
+        end
         local function safe(r,pad)
-            return not collision(staticIndex,r,pad) and not collision(reservedIndex,r,pad)
+            return not prisonBlocked(r,pad) and not collision(staticIndex,r,pad) and not collision(reservedIndex,r,pad)
                 and not collision(accessIndex,r,pad)
         end
         local caps,parks=0,0
@@ -1276,8 +1301,8 @@ if x2-x1<4000 and z2-z1<4000 then
                 table.insert(trees,p)
             end
         end
-        -- Step 111: rasterize a continuous grass surface at voxel resolution.
-        -- The municipal park reservation is grass, not an obstacle to its own lawn.
+        -- Restore the visible lawns and paths. Fill only uncovered flat gaps
+        -- with a continuous grass-colored surface below the path tops.
         local flatProbe=RaycastParams.new()
         flatProbe.FilterType=Enum.RaycastFilterType.Include
         flatProbe.FilterDescendantsInstances={ground,foundation.ContinuousCityFoundation}
@@ -1285,49 +1310,37 @@ if x2-x1<4000 and z2-z1<4000 then
         hillProbe.FilterType=Enum.RaycastFilterType.Include
         hillProbe.FilterDescendantsInstances={terrain}
         local grassColor=terrain:GetMaterialColor(Enum.Material.Grass)
-        local infill=Instance.new("Folder");infill.Name="ParkGrassInfill111";infill.Parent=edge
-        local region=Region3.new(Vector3.new(maxX-4,-12,z1-4),Vector3.new(x2+12,8,z2+12)):ExpandToGrid(4)
-        local mats,occ=terrain:ReadVoxels(region,4)
-        local origin=region.CFrame.Position-region.Size/2
-        local count=0
-        for ix=1,#mats do
-            local px=origin.X+(ix-.5)*4
-            for iz=1,#mats[ix][1] do
-                local pz=origin.Z+(iz-.5)*4
-                local rr=box(px,pz,4,4)
-                local blocked=collision(staticIndex,rr,0) or collision(roadIndex,rr,0) or collision(accessIndex,rr,0)
+        local infill=Instance.new("Folder");infill.Name="ParkGrassInfill112";infill.Parent=edge
+        local stripes=0
+        for px=math.floor(maxX/4)*4+2,x2+10,4 do
+            local startZ,lastZ,runY
+            local function flush()
+                if not startZ then return end
+                part(infill,"GrassSeam",Vector3.new(4.08,.18,lastZ-startZ+4.08),CFrame.new(px,runY,(startZ+lastZ)/2),grassColor,Enum.Material.Grass,true)
+                stripes+=1;startZ=nil;lastZ=nil;runY=nil
+            end
+            for pz=math.floor(z1/4)*4+2,z2+10,4 do
+                local rr=box(px,pz,4.08,4.08)
                 local reservation=collision(reservedIndex,rr,0)
-                if reservation and reservation~=parkPlot then blocked=true end
-                if blocked then continue end
-                local from=Vector3.new(px,400,pz)
-                local flat=W:Raycast(from,Vector3.new(0,-430,0),flatProbe)
-                local hill=W:Raycast(from,Vector3.new(0,-430,0),hillProbe)
-                if not flat and not hill then continue end
-                local surface=flat and flat.Position.Y or floorY
-                if hill and hill.Position.Y>surface+1 then continue end
-                if math.abs(surface-streetY)>1.2 then continue end
-                local top=surface+.22
-                for iy=1,#mats[ix] do
-                    local wy=origin.Y+(iy-.5)*4
-                    local fill=math.clamp((top-wy)/4+.5,0,1)
-                    if fill>0 and fill>=occ[ix][iy][iz] then
-                        occ[ix][iy][iz]=fill;mats[ix][iy][iz]=Enum.Material.Grass
+                local y
+                if not prisonBlocked(rr,0) and not collision(staticIndex,rr,0) and not collision(roadIndex,rr,0) and not collision(accessIndex,rr,0) and (not reservation or reservation==parkPlot) then
+                    local from=Vector3.new(px,400,pz)
+                    local flat=W:Raycast(from,Vector3.new(0,-430,0),flatProbe)
+                    local hill=W:Raycast(from,Vector3.new(0,-430,0),hillProbe)
+                    if flat and math.abs(flat.Position.Y-streetY)<1.2 and (not hill or hill.Position.Y<flat.Position.Y+.18) then
+                        y=flat.Position.Y+.035
                     end
                 end
-                count+=1
+                if y then
+                    if runY and math.abs(y-runY)>.025 then flush() end
+                    if not startZ then startZ=pz;runY=y end
+                    lastZ=pz
+                else flush() end
             end
-            if ix%12==0 then task.wait() end
+            flush()
+            if math.floor(px/4)%8==0 then task.wait() end
         end
-        terrain:WriteVoxels(region,4,mats,occ)
-        -- Keep a thin grass-colored substrate under the voxel surface; it covers
-        -- minor interpolation seams without hiding terrain grass above it.
-        for _,child in ipairs(edge:GetDescendants()) do
-            if child:IsA("BasePart") and (child.Name=="ParkLawn" or child.Name=="ContinuousLawn") then
-                child.Color=grassColor
-                child.CFrame+=Vector3.new(0,-.08,0)
-            end
-        end
-        print("[CityReplan94] PARK111 grass terrain cells:",count)
+        print("[CityReplan94] PARK112 grass seams:",stripes)
         print("[CityReplan94] PARK108 lawn cells:",cells,"path nodes:",#pathPoints,"benches:",benches,"lamps:",lamps,"fountains:",fountains,"tree sites:",#trees)
         print("[CityReplan94] EDGE104 parks:",parks,"turnarounds:",caps)
     end
