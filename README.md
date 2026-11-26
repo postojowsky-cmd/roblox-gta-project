@@ -1,5 +1,17 @@
 # Roblox City Heist: Drive & Escape
 
+## Aktualny stan — 26.11.2026
+
+**Krok 120 — zakończona sesja deweloperska.** Nowy układ miasta: 198 budynków (65 centralnych), 8 parkingów, stacja paliw, góry, lasy, park i willa z przejezdnym podjazdem. W ostatnim teście wygenerowano 10 zagospodarowanych działek oraz 42 nasadzenia żywopłotu. Próba połączenia ślepych ulic nie dała rezultatów (0 połączeń, 0 placów do zawracania).
+
+**[Dziennik sesji 26.11.2026 — wykonane prace, wyniki testów i plan kroku 121](docs/SESSION_2026-11-26.md).**
+
+Gałąź rozwojowa: `feature/saab-ground-placement`. Główny skrypt mapy: `src/cityheist/CityReplan94.server.lua`. Ostatni test: lokalne miejsce `City Heist Drive Escape v92.rbxl`, Roblox Studio + Rojo.
+
+**Uwaga:** najnowszy świat powstaje w Play, nie jest jeszcze trwale zapisany ani opublikowany. Do odtworzenia potrzebne są lokalne szablony i dostępne assety Creator Store. Następny krok: naprawa ślepych ulic i połączenia terenu z drogami, następnie trwały zapis świata.
+
+---
+
 ## Aktualny stan — 23.11.2026
 
 **Sesja zakończona.** W Roblox Studio potwierdzono wygenerowanie **28 dodatkowych budynków (20 + 8)**, **65 dekoracji** (23 drzewa, 28 latarni, 14 ławek), **2 parkingów**, **1 stacji benzynowej** oraz **3 oznaczonych dojazdów**. Saab został przetestowany przy stacji. Oryginalne drogi i istniejące mechaniki pozostały bez zmian.
