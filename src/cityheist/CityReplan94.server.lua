@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 116: continuous exposed road, structural mansion supports and park plazas")
+print("[CityReplan94] REVISION 120: residential gardens, mesh foliage and street transitions")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1445,6 +1445,27 @@ if x2-x1<4000 and z2-z1<4000 then
                 end
             end
             inspect(asset)
+            -- Preserve genuine shrub/hedge assets when present in the imported pack.
+            local shrubs=library:FindFirstChild("Shrubs120") or Instance.new("Folder")
+            shrubs.Name="Shrubs120";shrubs.Parent=library
+            for _,v in ipairs(asset:GetDescendants()) do
+                local n=v.Name:lower()
+                if not (n:find("hedge") or n:find("shrub") or n:find("bush")) then continue end
+                if not (v:IsA("Model") or v:IsA("MeshPart")) then continue end
+                local l,h=bounds(v);local size=h-l
+                if size.Y<.5 or size.Y>35 or math.max(size.X,size.Z)>45 then continue end
+                local model=Instance.new("Model");model.Name=v.Name
+                local list=v:IsA("BasePart") and {v} or v:GetDescendants()
+                for _,p in ipairs(list) do
+                    if p:IsA("MeshPart") or (p:IsA("BasePart") and p:FindFirstChildOfClass("SpecialMesh")) then
+                        local q=p:Clone()
+                        for _,child in ipairs(q:GetDescendants()) do if child:IsA("BasePart") then child:Destroy() end end
+                        q.Anchored=true;q.CanCollide=false;q.CanQuery=false;q.CanTouch=false;q.Parent=model
+                    end
+                end
+                if #model:GetChildren()>0 then model.Parent=shrubs else model:Destroy() end
+                if #shrubs:GetChildren()>=12 then break end
+            end
             local count=0
             for _,v in ipairs(candidates) do
                 local m=Instance.new("Model");m.Name="Tree_"..id.."_"..v.Name
@@ -1828,15 +1849,45 @@ do
                     end
                     return CFrame.new(path[#path])
                 end
-                local function hedge(cf,span)
-                    part(entry,"HedgeCore",Vector3.new(3.8,4.4,span),cf*CFrame.new(0,2.2,0),Color3.fromRGB(47,79,36),Enum.Material.Grass,true)
-                    for z=-span/2+.6,span/2,1.4 do
-                        for _,side in ipairs({-1,1}) do
-                            local leaf=part(entry,"DenseFoliage",Vector3.new(2.4,2.6,2.5),cf*CFrame.new(side*1.2,3.1+rng:NextNumber(-.3,.4),z),Color3.fromRGB(rng:NextInteger(43,68),rng:NextInteger(83,119),rng:NextInteger(30,49)),Enum.Material.Grass,false)
-                            leaf.Shape=Enum.PartType.Ball;leaf.CanQuery=false;leaf.CanTouch=false
+                local library=SS:FindFirstChild("CityForestTemplates102")
+                local shrubs=library and library:FindFirstChild("Shrubs120")
+                local shrubPool=shrubs and shrubs:GetChildren() or {}
+                local meshPool={}
+                if library then
+                    for _,p in ipairs(library:GetDescendants()) do
+                        if p:IsA("MeshPart") then
+                            local n=p.Name:lower()
+                            if n:find("leaf") or n:find("leaves") or n:find("foliage") or n:find("canopy") then table.insert(meshPool,p) end
                         end
                     end
                 end
+                local hedgeCount=0
+                local function hedge(cf,span)
+                    for zz=-span/2+1.2,span/2,2.4 do
+                        local frame=cf*CFrame.new(0,0,zz)
+                        local p=frame.Position
+                        local hit=W:Raycast(p+Vector3.new(0,12,0),Vector3.new(0,-25,0),terrainRay)
+                        local y=hit and hit.Position.Y or p.Y
+                        if #shrubPool>0 then
+                            local model=shrubPool[(hedgeCount%#shrubPool)+1]:Clone()
+                            local l,h=bounds(model)
+                            model:ScaleTo(model:GetScale()*5/math.max(h.Y-l.Y,.1))
+                            model:PivotTo(CFrame.Angles(0,rng:NextNumber(0,6.28),0))
+                            l,h=bounds(model)
+                            model:PivotTo(model:GetPivot()+Vector3.new(p.X-(l.X+h.X)/2,y-l.Y,p.Z-(l.Z+h.Z)/2))
+                            model.Parent=entry
+                        elseif #meshPool>0 then
+                            local q=meshPool[(hedgeCount%#meshPool)+1]:Clone()
+                            q.Size=Vector3.new(4.5,5,4.2);q.CFrame=CFrame.new(p.X,y+2.4,p.Z)*CFrame.Angles(0,rng:NextNumber(0,6.28),0)
+                            q.Anchored=true;q.CanCollide=false;q.CanQuery=false;q.CanTouch=false;q.Parent=entry
+                        else
+                            -- No verified foliage mesh: retain a simple placeholder, explicitly logged.
+                            part(entry,"HedgePlaceholder",Vector3.new(4,4.5,2.7),CFrame.new(p.X,y+2.25,p.Z),Color3.fromRGB(48,86,39),Enum.Material.Grass,false)
+                        end
+                        hedgeCount+=1
+                    end
+                end
+                print("[District120] Hedge sources:",#shrubPool,"foliage meshes:",#meshPool)
                 -- Trim only terrain protruding through the street connection.
                 local start=path[1]
                 local region=Region3.new(start+Vector3.new(-44,-12,-44),start+Vector3.new(44,20,44)):ExpandToGrid(4)
@@ -1865,6 +1916,9 @@ do
                     end
                 end end
                 W.Terrain:WriteVoxels(region,4,mm,oo)
+                -- Asphalt apron overlaps the existing street and the first road deck.
+                local approach=atDistance(0)
+                part(entry,"StreetApron120",Vector3.new(20,.28,12),approach*CFrame.new(0,-.15,2),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
                 local gateCF=atDistance(32)
                 for _,side in ipairs({-1,1}) do
                     local cf=gateCF*CFrame.new(side*12,0,0)
@@ -1894,31 +1948,76 @@ do
                 local sign=part(entry,"EstateSign",Vector3.new(2.8,1.4,.18),gateCF*CFrame.new(12,5,1.59),iron,Enum.Material.Metal,false)
                 local gui=Instance.new("SurfaceGui");gui.Face=Enum.NormalId.Back;gui.SizingMode=Enum.SurfaceGuiSizingMode.PixelsPerStud;gui.PixelsPerStud=50;gui.Parent=sign
                 local label=Instance.new("TextLabel");label.Size=UDim2.fromScale(1,1);label.BackgroundTransparency=1;label.Text="PRIVATE ESTATE";label.TextColor3=Color3.fromRGB(231,211,167);label.TextScaled=true;label.Font=Enum.Font.GothamMedium;label.Parent=gui
-                -- Fence existing nearby residential lots, strictly inside their own lot.
+                -- Expand residential parcels after route selection, preserving the proven driveway.
                 local fenced=0
+                local yards={}
                 for _,house in ipairs(groups.CityHeistInfill81:GetChildren()) do
                     if not house:IsA("Model") or not house.Name:match("^DetachedHouse") then continue end
                     local lot=house:FindFirstChild("Lot")
-                    if not lot or not lot:IsA("BasePart") or (Vector2.new(lot.Position.X,lot.Position.Z)-Vector2.new(path[1].X,path[1].Z)).Magnitude>220 then continue end
+                    if not lot or not lot:IsA("BasePart") or (Vector2.new(lot.Position.X,lot.Position.Z)-Vector2.new(path[1].X,path[1].Z)).Magnitude>520 then continue end
                     local cf=lot.CFrame*CFrame.new(0,lot.Size.Y/2,0)
-                    local hx,hz=lot.Size.X/2-.65,lot.Size.Z/2-.65
-                    local function fence(a,b)
-                        local len=(b-a).Magnitude
-                        local frame=CFrame.lookAt((a+b)/2,b)
-                        for _,y in ipairs({.7,2.5}) do part(entry,"GardenRail",Vector3.new(.18,.18,len),frame*CFrame.new(0,y,0),iron,Enum.Material.Metal,true) end
-                        for i=0,math.ceil(len/1.5) do
-                            local p=a:Lerp(b,i/math.ceil(len/1.5))
-                            part(entry,"GardenPicket",Vector3.new(.18,3,.18),CFrame.new(p+Vector3.new(0,1.5,0)),iron,Enum.Material.Metal,true)
+                    local hl,hh=bounds(house);local own=rect(hl,hh)
+                    local hx,hz=lot.Size.X/2,lot.Size.Z/2
+                    local function safe(xx,zz)
+                        local p=cf:PointToWorldSpace(Vector3.new(xx,0,zz))
+                        local rr={x1=p.X-1,x2=p.X+1,z1=p.Z-1,z2=p.Z+1}
+                        if collision(roadIndex,rr,2) or collision(staticIndex,rr,2) or collision(accessIndex,rr,2) then return false end
+                        for _,r in ipairs(reserved) do
+                            if intersects(rr,r,1) and not (r.x1>=own.x1-.5 and r.x2<=own.x2+.5 and r.z1>=own.z1-.5 and r.z2<=own.z2+.5) then return false end
+                        end
+                        for _,r in ipairs(yards) do if intersects(rr,r,2) then return false end end
+                        for j=1,math.min(24,#path-1) do
+                            local a,b=Vector2.new(path[j].X,path[j].Z),Vector2.new(path[j+1].X,path[j+1].Z)
+                            local ab=b-a;local v=Vector2.new(p.X,p.Z)
+                            if (v-a-ab*math.clamp((v-a):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)).Magnitude<15 then return false end
+                        end
+                        local yy=surface(p.X,p.Z)
+                        return yy and math.abs(yy-cf.Position.Y)<1.3
+                    end
+                    local left,right,back,front=hx,hx,hz,hz
+                    for step=1,9 do
+                        for _,side in ipairs({"left","right","back","front"}) do
+                            local l,r,b,f=left,right,back,front
+                            if side=="left" then l+=2 elseif side=="right" then r+=2 elseif side=="back" then b+=2 else f+=2 end
+                            local ok=true
+                            for xx=-l,r,3 do if not safe(xx,-b) or not safe(xx,f) then ok=false;break end end
+                            if ok then for zz=-b,f,3 do if not safe(-l,zz) or not safe(r,zz) then ok=false;break end end end
+                            if ok and safe(r,f) and safe(-l,-b) and safe(r,-b) and safe(-l,f) then left,right,back,front=l,r,b,f end
                         end
                     end
-                    local function pt(xx,zz) return cf:PointToWorldSpace(Vector3.new(xx,0,zz)) end
-                    fence(pt(-hx,-hz),pt(hx,-hz))
-                    fence(pt(-hx,-hz),pt(-hx,hz))
-                    fence(pt(hx,-hz),pt(hx,hz))
-                    -- Leave the front open at the pedestrian and garage approach.
-                    fence(pt(5,hz),pt(hx,hz))
-                    fenced+=1
+                    local garden=Instance.new("Folder");garden.Name="Garden120";garden.Parent=house
+                    local function p(n,size,xx,yy,zz,color,mat,solid)
+                        return part(garden,n,size,cf*CFrame.new(xx,yy,zz),color,mat,solid)
+                    end
+                    local grass=Color3.fromRGB(85,117,63)
+                    p("Lawn",Vector3.new(left+right,.12,back+front),(right-left)/2,.025,(front-back)/2,grass,Enum.Material.Grass,true)
+                    local function fence(a,b)
+                        local len=(b-a).Magnitude
+                        if len<.5 then return end
+                        local frame=CFrame.lookAt((a+b)/2,b)
+                        for _,y in ipairs({.7,2.7}) do part(garden,"Rail",Vector3.new(.18,.18,len),frame*CFrame.new(0,y,0),iron,Enum.Material.Metal,true) end
+                        for i=0,math.ceil(len/1.6) do
+                            local pos=a:Lerp(b,i/math.ceil(len/1.6))
+                            part(garden,"Picket",Vector3.new(.2,3.2,.2),CFrame.new(pos+Vector3.new(0,1.6,0)),iron,Enum.Material.Metal,true)
+                        end
+                    end
+                    local function pt(xx,zz) return cf:PointToWorldSpace(Vector3.new(xx,.12,zz)) end
+                    fence(pt(-left,-back),pt(right,-back));fence(pt(-left,-back),pt(-left,front));fence(pt(right,-back),pt(right,front))
+                    fence(pt(-left,front),pt(-12,front));fence(pt(3,front),pt(right,front))
+                    local depth=math.max(1,front-9)
+                    p("Driveway",Vector3.new(9,.18,depth),-7,.14,9+depth/2,stone,Enum.Material.Concrete,true)
+                    p("Walkway",Vector3.new(3,.18,depth),0,.14,9+depth/2,stone,Enum.Material.Concrete,true)
+                    if back>hz+5 then
+                        p("Patio",Vector3.new(12,.2,math.min(8,back-11)),0,.15,-back+5,stone,Enum.Material.Pavement,true)
+                        p("GardenTable",Vector3.new(4,.25,3),0,2.2,-back+5,iron,Enum.Material.Wood,true)
+                        p("TableLeg",Vector3.new(.6,2,.6),0,1,-back+5,iron,Enum.Material.Metal,true)
+                    end
+                    local corners={pt(-left,-back),pt(right,front),pt(-left,front),pt(right,-back)}
+                    local l=Vector3.new(math.huge,0,math.huge);local h=Vector3.new(-math.huge,0,-math.huge)
+                    for _,v in ipairs(corners) do l=Vector3.new(math.min(l.X,v.X),0,math.min(l.Z,v.Z));h=Vector3.new(math.max(h.X,v.X),0,math.max(h.Z,v.Z)) end
+                    table.insert(yards,rect(l,h));fenced+=1
                 end
+                print("[District120] Landscaped yards:",fenced,"hedge plants:",hedgeCount)
                 -- Reinforce the exposed underside around the measured driveway terrace.
                 local supports119=0
                 for px=goal.X-24,goal.X+16,5 do
