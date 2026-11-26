@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 106: municipal park, green buffers and self-contained modern villa")
+print("[CityReplan94] REVISION 107: expanded landscape park and Creator Store villa")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1134,23 +1134,48 @@ if x2-x1<4000 and z2-z1<4000 then
             reserve(rr);parks=1
             print("[CityReplan94] PARK106 placed:",x,z,w,d)
         else warn("[CityReplan94] PARK106 no safe contiguous site") end
-        -- Larger unadorned, irregularly spaced green buffers, no tiled paths.
-        local buffers=0
-        for i=1,160 do
-            if buffers>=12 then break end
-            local w,d=rng:NextInteger(75,160),rng:NextInteger(65,135)
-            local x,z=rng:NextNumber(x1+w/2,x2-w/2),rng:NextNumber(z1+d/2,z2-d/2)
-            if x<maxX-70 and x>minX+70 and z<maxZ-70 and z>minZ+70 then continue end
-            if x>900 and z>470 then continue end
-            local rr=box(x,z,w,d)
-            if not safe(rr,6) or collision(roadIndex,rr,5) then continue end
-            local y=level(x,z,w,d)
-            if not y then continue end
-            part(edge,"GreenBuffer",Vector3.new(w,.18,d),CFrame.new(x,y+.09,z),green,Enum.Material.Grass,true)
-            for j=1,rng:NextInteger(2,5) do tree(edge,x+rng:NextNumber(-w*.36,w*.36),y+.18,z+rng:NextNumber(-d*.36,d*.36),rng:NextNumber(12,23)) end
-            reserve(rr);buffers+=1
+        -- Extend the main park around the prison apron, without covering prison,
+        -- access lanes, existing roads or the selected estate hillside.
+        local extension=Instance.new("Folder");extension.Name="MunicipalParkExtension107";extension.Parent=edge
+        local cells=0
+        local cell=12
+        local function available(px,pz)
+            local rr=box(px,pz,cell,cell)
+            if not safe(rr,4) or collision(roadIndex,rr,4) then return nil end
+            return level(px,pz,cell,cell)
         end
-        print("[CityReplan94] GREEN106 buffers:",buffers)
+        -- Fill the east-side open apron with contiguous strips of lawn.
+        -- Keep a narrow neutral strip at the street and prison edges.
+        for px=math.max(maxX+12,x1+cell/2),x2-cell/2,cell do
+            local runStart,runY
+            local function flush(last)
+                if not runStart then return end
+                local length=last-runStart+cell
+                part(extension,"ParkLawn",Vector3.new(cell,.16,length),CFrame.new(px,runY+.08,(runStart+last)/2),green,Enum.Material.Grass,true)
+                runStart=nil;runY=nil
+            end
+            for pz=z1+cell/2,z2-cell/2,cell do
+                local y=available(px,pz)
+                if not y then flush(pz-cell)
+                else
+                    if runStart and math.abs(y-runY)>.08 then flush(pz-cell) end
+                    if not runStart then runStart=pz;runY=y end
+                    cells+=1
+                    -- Mark a winding promenade in the lawn, and two side loops.
+                    local curve=maxX+95+24*math.sin(pz/75)
+                    local curve2=x2-60+17*math.sin(pz/95)
+                    if math.abs(px-curve)<cell*.52 or math.abs(px-curve2)<cell*.52 or (math.abs(pz-243)<cell*.52 and px<1050) then
+                        part(extension,"ParkWalk",Vector3.new(cell,.12,cell),CFrame.new(px,y+.22,pz),Color3.fromRGB(181,175,159),Enum.Material.Concrete,true)
+                    elseif rng:NextNumber()<.075 then
+                        local marker=part(extension,"ParkTreeSite",Vector3.new(.2,.2,.2),CFrame.new(px,y+.16,pz),green,Enum.Material.Grass,false)
+                        marker.Transparency=1;marker.CanQuery=false;marker.CanTouch=false
+                    end
+                end
+            end
+            flush(z1+cell/2+math.floor((z2-z1-cell)/cell)*cell)
+            task.wait()
+        end
+        print("[CityReplan94] PARK107 extension lawn cells:",cells)
         print("[CityReplan94] EDGE104 parks:",parks,"turnarounds:",caps)
     end
 
@@ -1220,6 +1245,24 @@ if x2-x1<4000 and z2-z1<4000 then
         -- Official pack reached mesh cloning in the previous Studio test.
         -- Keep original mesh fidelity; this property is not writable by server scripts.
         import(6432306802,light)
+        local edge=foundation:FindFirstChild("CityEdge104")
+        local extension=edge and edge:FindFirstChild("MunicipalParkExtension107")
+        if extension and #light>0 then
+            local prng=Random.new(107)
+            local count=0
+            for _,site in ipairs(extension:GetChildren()) do
+                if site.Name~="ParkTreeSite" then continue end
+                local pos=site.Position
+                local m=light[prng:NextInteger(1,#light)]:Clone()
+                local lo,hi=bounds(m)
+                m:ScaleTo(m:GetScale()*prng:NextNumber(17,27)/(hi.Y-lo.Y))
+                m:PivotTo(CFrame.Angles(0,prng:NextNumber(0,math.pi*2),0))
+                lo,hi=bounds(m)
+                m:PivotTo(m:GetPivot()+Vector3.new(pos.X-(lo.X+hi.X)/2,pos.Y-lo.Y-.3,pos.Z-(lo.Z+hi.Z)/2))
+                m.Parent=extension;site:Destroy();count+=1
+            end
+            print("[CityReplan94] PARK107 realistic trees:",count)
+        end
         local forest=Instance.new("Folder");forest.Name="MountainForest102";forest.Parent=foundation
         local rng=Random.new(10227)
         local ray=RaycastParams.new()
@@ -1266,65 +1309,30 @@ if x2-x1<4000 and z2-z1<4000 then
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
--- Self-contained architectural model: no external asset permission required.
+-- Creator Store candidates, no procedural substitute.
 do
+    local AS=game:GetService("AssetService")
     local library=Instance.new("Folder");library.Name="CityOwnerMansionTemplates104";library.Parent=SS
-    local villa=Instance.new("Model");villa.Name="ModernOwnerVilla106";villa.Parent=library
-    local white=Color3.fromRGB(232,230,222)
-    local dark=Color3.fromRGB(44,48,53)
-    local wood=Color3.fromRGB(126,88,57)
-    local glass=Color3.fromRGB(125,176,193)
-    local function P(n,w,h,d,x,y,z,c,mat,solid)
-        return part(villa,n,Vector3.new(w,h,d),CFrame.new(x,y,z),c,mat,solid)
+    for _,id in ipairs({121472539159726,110631054133678,128296418746007,135543227973212,13766770987}) do
+        local ok,asset=pcall(function() return AS:LoadAssetAsync(id) end)
+        if not ok or typeof(asset)~="Instance" then
+            warn("[OwnerMansion107] IMPORT BLOCKED:",id,tostring(asset));continue
+        end
+        for _,v in ipairs(asset:GetDescendants()) do
+            if v:IsA("LuaSourceContainer") or v:IsA("Sound") or v:IsA("RemoteEvent") or v:IsA("RemoteFunction") or v:IsA("ClickDetector") or v:IsA("ProximityPrompt") or v:IsA("Humanoid") or v:IsA("Explosion") or v:IsA("Tool") then v:Destroy() end
+        end
+        local count=0
+        for _,v in ipairs(asset:GetDescendants()) do
+            if v:IsA("BasePart") and not v:IsA("Terrain") then v.Anchored=true;count+=1 end
+        end
+        local lo,hi=bounds(asset);local size=hi-lo
+        if count>=25 and count<=12000 and size.X>=20 and size.Z>=20 and size.Y>=10 and math.max(size.X,size.Z)<=500 and size.Y<=180 and size.Y/math.max(size.X,size.Z)>.09 then
+            asset.Name="CreatorStoreVilla_"..id;asset.Parent=library
+            print("[OwnerMansion107] IMPORTED:",id,"parts:",count,"size:",size)
+            break
+        end
+        warn("[OwnerMansion107] REJECTED:",id,count,size);asset:Destroy()
     end
-    local function G(n,w,h,d,x,y,z)
-        local q=P(n,w,h,d,x,y,z,glass,Enum.Material.Glass,true);q.Transparency=.35;return q
-    end
-    P("EstateDeck",104,1,94,0,.5,0,white,Enum.Material.Concrete,true)
-    P("DriveCourt",48,.2,29,-24,1.1,-31,dark,Enum.Material.Asphalt,true)
-    P("GroundFloor",76,.8,36,-8,1.4,1,white,Enum.Material.Concrete,true)
-    P("BackWall",76,13,1,-8,8.3,19,white,Enum.Material.Concrete,true)
-    P("WestWall",1,13,36,-46,8.3,1,white,Enum.Material.Concrete,true)
-    P("EastWall",1,13,36,30,8.3,1,white,Enum.Material.Concrete,true)
-    P("GaragePartition",1,13,35,-16,8.3,1,dark,Enum.Material.Concrete,true)
-    P("GarageHeader",30,3,1,-31,13.3,-17,dark,Enum.Material.Concrete,true)
-    P("GarageDoor",27,10,.5,-31,6.8,-16.8,dark,Enum.Material.Metal,false)
-    for j=1,4 do P("GarageDoorSlat",27,.12,.2,-31,2+j*2,-17.15,white,Enum.Material.Metal,false) end
-    G("LivingGlassLeft",17,12,.6,-7,7.8,-17)
-    G("LivingGlassRight",17,12,.6,20,7.8,-17)
-    P("EntryHeader",10,3,1,6.5,13.3,-17,wood,Enum.Material.Wood,true)
-    for _,x in ipairs({-15,1.5,11.5,29}) do P("WindowFrame",.5,13,.9,x,8.3,-17,dark,Enum.Material.Metal,true) end
-    P("UpperSlab",82,1.4,42,-7,15.5,1,white,Enum.Material.Concrete,true)
-    P("UpperFloor",60,.6,28,-2,16.5,5,wood,Enum.Material.WoodPlanks,true)
-    P("UpperBackWall",60,11,1,-2,22,19,white,Enum.Material.Concrete,true)
-    P("UpperLeftWall",1,11,28,-32,22,5,white,Enum.Material.Concrete,true)
-    G("UpperRightGlass",.7,10,26,28,22,5)
-    G("UpperFrontGlass",58,10,.7,-2,22,-9)
-    for _,x in ipairs({-31,-16,-2,13,27}) do P("UpperMullion",.45,11,1,x,22,-9,dark,Enum.Material.Metal,true) end
-    P("CantileverRoof",67,1.5,34,-2,28,4,white,Enum.Material.Concrete,true)
-    P("RoofAccent",20,1,30,-36,16.8,3,dark,Enum.Material.Concrete,true)
-    G("BalconyRail",59,3,.4,-2,17.8,-19)
-    for j=1,15 do P("ExteriorStair",5,.7,2.1,34,1.5+j*.95,18-j*2.05,white,Enum.Material.Concrete,true) end
-    P("PoolDeck",86,.25,23,0,1.15,34,wood,Enum.Material.WoodPlanks,true)
-    P("PoolBasin",44,.6,17,7,1.5,34,Color3.fromRGB(32,104,132),Enum.Material.SmoothPlastic,true)
-    local water=P("PoolWater",42,.15,15,7,2,34,Color3.fromRGB(53,170,205),Enum.Material.Glass,false);water.Transparency=.28
-    for _,side in ipairs({-1,1}) do
-        P("PoolCoping",46,.55,1,7,2,34+side*8.5,white,Enum.Material.Concrete,true)
-        P("PoolCoping",1,.55,17,7+side*22.5,2,34,white,Enum.Material.Concrete,true)
-    end
-    for _,x in ipairs({-30,-20}) do
-        P("Lounger",5,.8,11,x,2,34,white,Enum.Material.Fabric,true)
-        P("LoungerBack",5,.8,4,x,3,30,white,Enum.Material.Fabric,true)
-    end
-    P("SofaBase",14,1.5,5,14,2.8,10,white,Enum.Material.Fabric,true)
-    P("SofaBack",14,3,1,14,4,12,dark,Enum.Material.Fabric,true)
-    P("CoffeeTable",7,1.3,3,14,2.5,4,wood,Enum.Material.Wood,true)
-    P("KitchenIsland",10,3.5,4,-7,3.5,11,white,Enum.Material.Marble,true)
-    for _,x in ipairs({-43,26}) do
-        local lamp=P("EntryLight",.6,1.6,.6,x,10,-17.6,Color3.fromRGB(255,222,170),Enum.Material.Neon,false)
-        local light=Instance.new("PointLight");light.Range=22;light.Brightness=1.4;light.Parent=lamp
-    end
-    print("[OwnerMansion106] Built local modern villa template")
 end
 -- Step 105: owner estate at the player-selected hill. No access-control logic yet.
 do
@@ -1346,7 +1354,7 @@ do
         local m=Instance.new("Model");m.Name="OwnerMansion"
         source:Clone().Parent=m
         local lo,hi=bounds(m);local size=hi-lo
-        local target=math.min(1,108/math.max(size.X,size.Z))
+        local target=math.min(1,140/math.max(size.X,size.Z))
         m:ScaleTo(m:GetScale()*target)
         m:PivotTo(CFrame.Angles(0,math.rad(90),0))
         lo,hi=bounds(m);size=hi-lo
@@ -1358,8 +1366,28 @@ do
             local estate=Instance.new("Folder");estate.Name="CityOwnerEstate105";estate.Parent=W
             -- Level only the selected plot; leave the rest of the mountain untouched.
             local base=math.floor(y/4)*4
-            W.Terrain:FillBlock(CFrame.new(x,base+90,z),Vector3.new(w,180,d),Enum.Material.Air)
-            W.Terrain:FillBlock(CFrame.new(x,base-12,z),Vector3.new(w,24,d),Enum.Material.Rock)
+            -- Sample first, then blend the terrace into its natural surroundings.
+            local columns={}
+            for dx=-math.ceil((w/2+40)/8)*8,w/2+40,8 do
+                for dz=-math.ceil((d/2+40)/8)*8,d/2+40,8 do
+                    local dist=math.max(math.abs(dx)-w/2,math.abs(dz)-d/2,0)
+                    if dist>=40 then continue end
+                    local px,pz=x+dx,z+dz
+                    local rr={x1=px-4,x2=px+4,z1=pz-4,z2=pz+4}
+                    if collision(staticIndex,rr,3) or collision(roadIndex,rr,3) or collision(accessIndex,rr,3) or collision(reservedIndex,rr,3) then continue end
+                    local h=sample(px,pz)
+                    if not h then continue end
+                    local t=math.clamp(dist/40,0,1);t=t*t*(3-2*t)
+                    local target=(base-3)*(1-t)+h*t
+                    table.insert(columns,{px,pz,h,target})
+                end
+            end
+            for _,c in ipairs(columns) do
+                local px,pz,h,top=c[1],c[2],c[3],c[4]
+                if h>top then W.Terrain:FillBlock(CFrame.new(px,(top+h+8)/2,pz),Vector3.new(8,h+8-top,8),Enum.Material.Air) end
+                local bottom=math.min(h,top)-12
+                W.Terrain:FillBlock(CFrame.new(px,(bottom+top)/2,pz),Vector3.new(8,top-bottom,8),Enum.Material.Grass)
+            end
             part(estate,"EstateTerrace",Vector3.new(w,.8,d),CFrame.new(x,base+.4,z),Color3.fromRGB(173,169,158),Enum.Material.Concrete,true)
             m:PivotTo(m:GetPivot()+Vector3.new(x-(lo.X+hi.X)/2,base+.8-lo.Y,z-(lo.Z+hi.Z)/2))
             m.Parent=estate
