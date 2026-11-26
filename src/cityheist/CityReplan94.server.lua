@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 96: distributed city density and architectural variety")
+print("[CityReplan94] REVISION 97: continuous foundation and irregular mountain foothills")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -486,30 +486,71 @@ for _,m in ipairs(replaceable) do m.Parent=retired end
 print("[CityReplan94] DOWNTOWN replaced:",#replaceable,"new central buildings:",centerCount)
 for _,n in ipairs(names) do groups[n].Parent=W end
 stage:Destroy()
--- Continuous terrain heightfield, with a broad green valley and irregular ridges.
--- Never write voxels inside the protected city/prison rectangle.
+-- Step 97: continuous foundation and asymmetrical mountain foothills.
 local terrain=W.Terrain
-local x1,x2,z1,z2=outer.x1-55,outer.x2+55,outer.z1-55,outer.z2+55
+local x1,x2,z1,z2=outer.x1-35,outer.x2+35,outer.z1-35,outer.z2+35
+-- Explicitly include the complete relocated prison and its parking/driveway.
+for _,name in ipairs({"CityPrison","CityPrisonGenerated"}) do
+    local obj=W:FindFirstChild(name)
+    if obj then
+        local lo,hi=bounds(obj)
+        if lo.X<hi.X and lo.Z<hi.Z then
+            x1=math.min(x1,lo.X-35);x2=math.max(x2,hi.X+35)
+            z1=math.min(z1,lo.Z-35);z2=math.max(z2,hi.Z+35)
+        end
+    end
+end
 local step=64
-local extent=480
+local extent=760
 local chunks=0
+local floorY=streetY-.25
+local floorColor=Color3.fromRGB(112,116,122)
+local floorMaterial=Enum.Material.Concrete
+local bestArea=0
+local groundParts=ground:IsA("BasePart") and {ground} or ground:GetDescendants()
+for _,p in ipairs(groundParts) do
+    if p:IsA("BasePart") and p.Anchored and p.CanCollide then
+        local lo,hi=bounds(p)
+        local area=(hi.X-lo.X)*(hi.Z-lo.Z)
+        if hi.Y<=streetY+.02 and hi.Y>=streetY-3 and area>bestArea and p.Material~=Enum.Material.Grass then
+            bestArea=area
+            floorY=math.min(hi.Y-.035,streetY-.12)
+            floorColor=p.Color;floorMaterial=p.Material
+        end
+    end
+end
+local cx,cz=(x1+x2)/2,(z1+z2)/2
 local function height(x,z)
     local dx=math.max(x1-x,0,x-x2)
     local dz=math.max(z1-z,0,z-z2)
     local d=math.sqrt(dx*dx+dz*dz)
-    if d<16 or d>extent then return nil end
-    local ridge=215+65*math.noise(x/370,z/370,9)
-    local width=105+25*math.noise(x/250,z/250,3)
+    if d<=0 then return nil end
+    local a=math.atan2(z-cz,x-cx)
+    -- Different ridge distances and lengths around the city, not a uniform ring.
+    local reach=550+105*math.sin(a*3+.7)+65*math.cos(a*5-1.1)
+    if d>reach then return nil end
+    local ridge=240+95*math.sin(a*2+.4)+55*math.noise(x/390,z/390,9)
+    local width=120+45*math.noise(x/260,z/260,3)
     local envelope=math.exp(-((d-ridge)/width)^2)
-    local peak=155+105*math.noise(x/210,z/210,14)+45*math.noise(x/85,z/85,7)
-    local fade=math.clamp((d-16)/65,0,1)*math.clamp((extent-d)/80,0,1)
-    return streetY-1+fade*(7+math.max(0,peak)*envelope+12*math.noise(x/42,z/42,5))
+    local peak=190+115*math.noise(x/210,z/210,14)+65*math.noise(x/95,z/95,7)
+    local fade=math.clamp(d/100,0,1)*math.clamp((reach-d)/110,0,1)
+    local spur=math.max(0,math.sin(a*4+1.2))*55*math.exp(-((d-390)/150)^2)
+    return floorY-.4+fade*(5+math.max(0,peak)*envelope+spur+16*math.noise(x/55,z/55,5))
 end
 if x2-x1<4000 and z2-z1<4000 then
+    local foundation=Instance.new("Folder")
+    foundation.Name="CityLandscape97"
+    foundation.Parent=W
+    -- One continuous low slab beneath all existing city and prison surfaces.
+    -- Existing roads, foundations and parking remain above it.
+    part(foundation,"ContinuousCityFoundation",Vector3.new(x2-x1,6,z2-z1),
+        CFrame.new(cx,floorY-3,cz),floorColor,floorMaterial,true)
+    print(string.format("[CityReplan94] FOUNDATION97 X %.0f..%.0f Z %.0f..%.0f top %.2f",x1,x2,z1,z2,floorY))
     for x=math.floor((x1-extent)/step)*step,x2+extent,step do
         for z=math.floor((z1-extent)/step)*step,z2+extent,step do
-            if x+step<=x1 or x>=x2 or z+step<=z1 or z>=z2 then
-                local region=Region3.new(Vector3.new(x,-8,z),Vector3.new(x+step,240,z+step)):ExpandToGrid(4)
+            -- Process boundary-crossing chunks too, but never change protected columns.
+            if not (x>=x1 and x+step<=x2 and z>=z1 and z+step<=z2) then
+                local region=Region3.new(Vector3.new(x,-12,z),Vector3.new(x+step,320,z+step)):ExpandToGrid(4)
                 local materials,occupancy=terrain:ReadVoxels(region,4)
                 local changed=false
                 for ix=1,#materials do
@@ -518,11 +559,11 @@ if x2-x1<4000 and z2-z1<4000 then
                         local h=height(wx,wz)
                         if h then
                             for iy=1,#materials[ix] do
-                                local wy=-8+(iy-.5)*4
+                                local wy=-12+(iy-.5)*4
                                 local fill=math.clamp((h-wy)/4+.5,0,1)
                                 if fill>occupancy[ix][iy][iz] then
                                     occupancy[ix][iy][iz]=fill
-                                    materials[ix][iy][iz]=(wy>100 and wy<h-7) and Enum.Material.Rock or Enum.Material.Grass
+                                    materials[ix][iy][iz]=(wy>115 and wy<h-6) and Enum.Material.Rock or Enum.Material.Grass
                                     changed=true
                                 end
                             end
@@ -534,6 +575,7 @@ if x2-x1<4000 and z2-z1<4000 then
             end
         end
     end
+    print("[CityReplan94] LANDSCAPE97 irregular foothills complete:",chunks)
 else
     warn("[CityReplan94] Landscape skipped: anomalous extent")
 end
