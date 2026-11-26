@@ -4,6 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
+print("[CityReplan94] REVISION 94.3: Terrain excluded from rectangular obstacle scan")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -68,7 +69,7 @@ for _,p in ipairs(roads:GetDescendants()) do
 end
 if #segments<4 then warn("[CityReplan94] No usable street segments");return end
 local static={}
-local support={ground}
+local support={ground,W.Terrain}
 local elevations={}
 for _,s in ipairs(segments) do table.insert(elevations,s.y) end
 table.sort(elevations)
@@ -83,7 +84,7 @@ local function isFlatSurface(p,lo,hi)
 end
 local outer={x1=minX,x2=maxX,z1=minZ,z2=maxZ}
 for _,p in ipairs(W:GetDescendants()) do
-    if p:IsA("BasePart") and p.Anchored and not insideOld(p)
+    if p:IsA("BasePart") and not p:IsA("Terrain") and p.Anchored and not insideOld(p)
         and not p:IsDescendantOf(ground) and not p:IsDescendantOf(roads) then
         local lo,hi=bounds(p)
         local dx,dz=hi.X-lo.X,hi.Z-lo.Z
