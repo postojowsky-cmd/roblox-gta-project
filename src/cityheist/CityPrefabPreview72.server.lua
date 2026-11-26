@@ -3,6 +3,29 @@
 -- Does not touch existing skyscrapers, gameplay buildings or road geometry.
 local RunService=game:GetService("RunService")
 if not RunService:IsStudio() then return end
+
+-- Step 90: preserve explicitly baked city geometry; never regenerate over it.
+local bakedWorld = game:GetService("Workspace")
+local bakedReady = true
+for _, name in ipairs({"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}) do
+    local folder = bakedWorld:FindFirstChild(name)
+    if not folder or folder:GetAttribute("CityHeistBaked90") ~= true or #folder:GetChildren() == 0 then
+        bakedReady = false
+        break
+    end
+end
+if bakedReady then
+    print("[CityBake90] Saved city retained: " .. script.Name)
+    return
+end
+-- Fail closed on a partial baked import rather than deleting saved geometry.
+for _, name in ipairs({"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}) do
+    local folder = bakedWorld:FindFirstChild(name)
+    if folder and folder:GetAttribute("CityHeistBaked90") == true then
+        warn("[CityBake90] Partial baked city; generation blocked: " .. script.Name)
+        return
+    end
+end
 local W=game:GetService("Workspace")
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityPrefab79Running") then return end
