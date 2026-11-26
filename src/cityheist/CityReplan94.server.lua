@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 112: restore park layout, protect prison walls only, preserve paths")
+print("[CityReplan94] REVISION 114: connected prison-side park and full-size local mansion")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -935,6 +935,8 @@ for _,p in ipairs(groundParts) do
     end
 end
 local cx,cz=(x1+x2)/2,(z1+z2)/2
+local parkMinZ,parkMaxZ=-520,440
+local parkMaxX=x2+120
 local function height(x,z)
     local dx=math.max(x1-x,0,x-x2)
     local dz=math.max(z1-z,0,z-z2)
@@ -944,6 +946,19 @@ local function height(x,z)
     local function smooth(t)
         t=math.clamp(t,0,1)
         return t*t*(3-2*t)
+    end
+    -- Gentle public park belt outside the prison apron; fade into the hills.
+    local parkDistance=math.max(maxX+12-x,0,x-parkMaxX,parkMinZ-z,z-parkMaxZ)
+    local parkWeight=1-smooth(parkDistance/100)
+    local parkColumn={x1=x-2,x2=x+2,z1=z-2,z2=z+2}
+    local parkClear=not collision(staticIndex,parkColumn,4) and not collision(roadIndex,parkColumn,4) and not collision(accessIndex,parkColumn,4) and not collision(reservedIndex,parkColumn,4)
+    local function parkHeight(h)
+        if x>=maxX+12 and parkWeight>0 and parkClear then
+            -- Keep the apron flat and make grass terrain outside its edge.
+            local flat=floorY+.35
+            return flat*parkWeight+(h or flat)*(1-parkWeight)
+        end
+        return h
     end
     local spurHeight=0
     if x>maxX+85 and math.abs(z)>350 then
@@ -965,19 +980,19 @@ local function height(x,z)
         spurHeight=clearance*falloff*(135+42*math.noise(x/180,z/180,17)+18*math.noise(x/85,z/85,8))
     end
     if d<=0 then
-        return spurHeight>.2 and floorY+spurHeight or nil
+        return parkHeight(spurHeight>.2 and floorY+spurHeight or nil)
     end
     local a=math.atan2(z-cz,x-cx)
     -- Different ridge distances and lengths around the city, not a uniform ring.
     local reach=550+105*math.sin(a*3+.7)+65*math.cos(a*5-1.1)
-    if d>reach then return spurHeight>.2 and floorY+spurHeight or nil end
+    if d>reach then return parkHeight(spurHeight>.2 and floorY+spurHeight or nil) end
     local ridge=240+95*math.sin(a*2+.4)+55*math.noise(x/390,z/390,9)
     local width=120+45*math.noise(x/260,z/260,3)
     local envelope=math.exp(-((d-ridge)/width)^2)
     local peak=190+115*math.noise(x/210,z/210,14)+65*math.noise(x/95,z/95,7)
     local fade=math.clamp(d/100,0,1)*math.clamp((reach-d)/110,0,1)
     local spur=math.max(0,math.sin(a*4+1.2))*55*math.exp(-((d-390)/150)^2)
-    return floorY+math.max(spurHeight,-.4+fade*(5+math.max(0,peak)*envelope+spur+16*math.noise(x/55,z/55,5)))
+    return parkHeight(floorY+math.max(spurHeight,-.4+fade*(5+math.max(0,peak)*envelope+spur+16*math.noise(x/55,z/55,5))))
 end
 if x2-x1<4000 and z2-z1<4000 then
     local foundation=Instance.new("Folder")
@@ -1075,8 +1090,11 @@ if x2-x1<4000 and z2-z1<4000 then
                 local l,h=bounds(prison);prisonRect=rect(l,h)
             end
         end
+        local prisonAccess=W:FindFirstChild("CityPrisonGenerated")
+        local accessRect
+        if prisonAccess then local l,h=bounds(prisonAccess);accessRect=rect(l,h) end
         local function prisonBlocked(r,pad)
-            return prisonRect and intersects(r,prisonRect,pad)
+            return (prisonRect and intersects(r,prisonRect,pad)) or (accessRect and intersects(r,accessRect,pad))
         end
         local function safe(r,pad)
             return not prisonBlocked(r,pad) and not collision(staticIndex,r,pad) and not collision(reservedIndex,r,pad)
@@ -1114,7 +1132,7 @@ if x2-x1<4000 and z2-z1<4000 then
             for x=x1+w/2+8,x2-w/2-8,12 do
                 for z=z1+d/2+8,z2-d/2-8,12 do
                     if x<maxX-80 and x>minX+80 and z<maxZ-80 and z>minZ+80 then continue end
-                    if x>900 and z>470 then continue end
+                    if z<parkMinZ or z>parkMaxZ or x<maxX+12 then continue end
                     local rr=box(x,z,w,d)
                     if not safe(rr,5) or collision(roadIndex,rr,6) then continue end
                     local y=level(x,z,w,d)
@@ -1178,11 +1196,12 @@ if x2-x1<4000 and z2-z1<4000 then
         local cell=12
         local function available(px,pz,w,d)
             local rr=box(px,pz,w or cell,d or cell)
+            if px<maxX+12 or px>parkMaxX or pz<parkMinZ or pz>parkMaxZ then return nil end
             if not safe(rr,4) or collision(roadIndex,rr,4) then return nil end
             return level(px,pz,w or cell,d or cell)
         end
         local sites={}
-        for px=math.max(maxX+12,x1+cell/2),x2-cell/2,cell do
+        for px=math.max(maxX+12,x1+cell/2),parkMaxX-cell/2,cell do
             local runStart,runY
             local function flush(last)
                 if not runStart then return end
@@ -1190,7 +1209,7 @@ if x2-x1<4000 and z2-z1<4000 then
                 runStart=nil;runY=nil
             end
             local last
-            for pz=z1+cell/2,z2-cell/2,cell do
+            for pz=parkMinZ+cell/2,parkMaxZ-cell/2,cell do
                 local y=available(px,pz)
                 if not y then flush(pz-cell)
                 else
@@ -1241,10 +1260,10 @@ if x2-x1<4000 and z2-z1<4000 then
                 previous=p
             end
         end
-        route(function(t)return maxX+48+13*math.sin(t/68),t end,z1+12,z2-12,8)
-        route(function(t)return x2-42+13*math.sin(t/85),t end,z1+12,z2-12,7)
-        for _,zz in ipairs({z1+65,-320,145,335,z2-70}) do
-            route(function(t)return t,zz+12*math.sin(t/47) end,maxX+20,x2-20,7)
+        route(function(t)return maxX+48+13*math.sin(t/68),t end,parkMinZ+24,parkMaxZ-24,8)
+        route(function(t)return x2+65+10*math.sin(t/85),t end,parkMinZ+24,parkMaxZ-24,8)
+        for _,zz in ipairs({-450,-390,215,335,400}) do
+            route(function(t)return t,zz+8*math.sin(t/47) end,maxX+20,parkMaxX-20,7)
         end
         -- Furniture faces the nearest promenade, never the roadway.
         local function bench(p,q)
@@ -1312,14 +1331,14 @@ if x2-x1<4000 and z2-z1<4000 then
         local grassColor=terrain:GetMaterialColor(Enum.Material.Grass)
         local infill=Instance.new("Folder");infill.Name="ParkGrassInfill112";infill.Parent=edge
         local stripes=0
-        for px=math.floor(maxX/4)*4+2,x2+10,4 do
+        for px=math.floor(maxX/4)*4+2,parkMaxX,4 do
             local startZ,lastZ,runY
             local function flush()
                 if not startZ then return end
                 part(infill,"GrassSeam",Vector3.new(4.08,.18,lastZ-startZ+4.08),CFrame.new(px,runY,(startZ+lastZ)/2),grassColor,Enum.Material.Grass,true)
                 stripes+=1;startZ=nil;lastZ=nil;runY=nil
             end
-            for pz=math.floor(z1/4)*4+2,z2+10,4 do
+            for pz=math.floor(parkMinZ/4)*4+2,parkMaxZ,4 do
                 local rr=box(px,pz,4.08,4.08)
                 local reservation=collision(reservedIndex,rr,0)
                 local y
@@ -1514,10 +1533,12 @@ do
         local m=Instance.new("Model");m.Name="OwnerMansion"
         source:Clone().Parent=m
         local lo,hi=bounds(m);local size=hi-lo
-        local target=math.min(1,140/math.max(size.X,size.Z))
+        local target=math.min(3,280/math.max(size.X,size.Z))
+        print("[OwnerMansion114] original:",size,"scale multiplier:",target)
         m:ScaleTo(m:GetScale()*target)
         m:PivotTo(CFrame.Angles(0,math.rad(90),0))
         lo,hi=bounds(m);size=hi-lo
+        print("[OwnerMansion114] final dimensions:",size)
         local w,d=math.max(100,size.X+30),math.max(100,size.Z+30)
         local plot={x1=x-w/2,x2=x+w/2,z1=z-d/2,z2=z+d/2}
         if not y or y<15 or collision(staticIndex,plot,8) or collision(reservedIndex,plot,8) or collision(roadIndex,plot,8) or collision(accessIndex,plot,8) then
