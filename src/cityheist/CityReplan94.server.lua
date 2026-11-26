@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 115: estate foundation, graded winding access, door collision audit and park expansion")
+print("[CityReplan94] REVISION 116: continuous exposed road, structural mansion supports and park plazas")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1287,9 +1287,11 @@ if x2-x1<4000 and z2-z1<4000 then
         end
         route(function(t)return maxX+48+13*math.sin(t/68),t end,parkMinZ+24,parkMaxZ-24,8)
         route(function(t)return x2+65+10*math.sin(t/85),t end,parkMinZ+24,parkMaxZ-24,8)
-        for _,zz in ipairs({-590,-450,-390,215,335,400,470}) do
+        for _,zz in ipairs({-590,-520,-450,-390,-310,-230,-150,-70,15,95,155,215,275,335,400,470}) do
             route(function(t)return t,zz+8*math.sin(t/47) end,maxX+20,parkMaxX-20,7)
         end
+        route(function(t)return x2+120+9*math.sin(t/65),t end,parkMinZ+24,parkMaxZ-24,7)
+        route(function(t)return maxX+100+12*math.sin(t/90),t end,parkMinZ+24,parkMaxZ-24,7)
         -- Furniture faces the nearest promenade, never the roadway.
         local function bench(p,q)
             local cf=CFrame.lookAt(Vector3.new(p.X,p.Y+.18,p.Z),Vector3.new(q.X,p.Y+.18,q.Z))
@@ -1330,6 +1332,21 @@ if x2-x1<4000 and z2-z1<4000 then
             if fountains>=6 then break end
             if near(p,pathPoints,17) and not near(p,plazas,105) and available(p.X,p.Z,38,38) then fountain(p);fountains+=1 end
         end
+        local circles=0
+        for _,p in ipairs(sites) do
+            if circles>=8 then break end
+            if not near(p,pathPoints,12) or near(p,plazas,65) or not available(p.X,p.Z,38,38) then continue end
+            disk("RestPlaza",p.X,p.Y+.32,p.Z,18,.32,stone,Enum.Material.Pavement,true)
+            disk("GardenIsland",p.X,p.Y+.56,p.Z,6,.45,green,Enum.Material.Grass,true)
+            for i=0,3 do
+                local a=i*math.pi/2+.4
+                local q=p+Vector3.new(12*math.cos(a),.32,12*math.sin(a))
+                bench(q,p);benches+=1
+            end
+            lamp(p+Vector3.new(5,.5,0));lamps+=1
+            table.insert(plazas,p);circles+=1
+        end
+        print("[CityReplan94] PARK116 rest plazas:",circles)
         for _,p in ipairs(sites) do
             local q,dist=nil,math.huge
             for _,v in ipairs(pathPoints) do
@@ -1339,7 +1356,7 @@ if x2-x1<4000 and z2-z1<4000 then
             if q and dist>=9 and dist<=17 and not near(p,plazas,21) and not near(p,furniture,26) and available(p.X,p.Z,10,10) then
                 if (benches+lamps)%2==0 then bench(p,q);benches+=1 else lamp(p);lamps+=1 end
                 table.insert(furniture,p)
-            elseif dist>10 and not near(p,plazas,23) and not near(p,furniture,8) and not near(p,trees,15) and rng:NextNumber()<.38 then
+            elseif dist>10 and not near(p,plazas,23) and not near(p,furniture,8) and not near(p,trees,12) and rng:NextNumber()<.65 then
                 local marker=P("ParkTreeSite",Vector3.new(.2,.2,.2),CFrame.new(p+Vector3.new(0,.16,0)),green,Enum.Material.Grass,false)
                 marker.Transparency=1;marker.CanQuery=false;marker.CanTouch=false
                 table.insert(trees,p)
@@ -1573,7 +1590,7 @@ do
             -- Level only the selected plot; leave the rest of the mountain untouched.
             local base=math.floor(math.min(y,streetY+100)/4)*4
             -- Sample first, then blend the terrace into its natural surroundings.
-            local blend=220
+            local blend=150
             local region=Region3.new(Vector3.new(x-w/2-blend,-12,z-d/2-blend),Vector3.new(x+w/2+blend,320,z+d/2+blend)):ExpandToGrid(4)
             local mats,occ=W.Terrain:ReadVoxels(region,4)
             local origin=region.CFrame.Position-region.Size/2
@@ -1610,6 +1627,26 @@ do
             part(estate,"EstateTerrace",Vector3.new(w,.8,d),CFrame.new(x,base+.4,z),Color3.fromRGB(173,169,158),Enum.Material.Concrete,true)
             m:PivotTo(m:GetPivot()+Vector3.new(x-(lo.X+hi.X)/2,base+.8-lo.Y,z-(lo.Z+hi.Z)/2))
             m.Parent=estate
+            -- Imported models may have invisible bounds below their visible slabs.
+            -- Support the visible underside locally, without filling rooms or pools.
+            local support=Instance.new("Folder");support.Name="MansionStructuralSupports116";support.Parent=estate
+            local visible={}
+            for _,p in ipairs(m:GetDescendants()) do
+                if p:IsA("BasePart") and p.Transparency<.8 then table.insert(visible,p) end
+            end
+            local probe=RaycastParams.new();probe.FilterType=Enum.RaycastFilterType.Include;probe.FilterDescendantsInstances=visible
+            local supports=0
+            for px=x-w/2+8,x+w/2-8,12 do
+                for pz=z-d/2+8,z+d/2-8,12 do
+                    local hit=W:Raycast(Vector3.new(px,base-1,pz),Vector3.new(0,100,0),probe)
+                    if hit and hit.Position.Y>base+1 and hit.Position.Y<base+30 and hit.Normal.Y<-.5 then
+                        local top=hit.Position.Y+.12
+                        part(support,"FoundationPier",Vector3.new(8,top-base+4,8),CFrame.new(px,(top+base-4)/2,pz),Color3.fromRGB(142,142,138),Enum.Material.Concrete,true)
+                        supports+=1
+                    end
+                end
+            end
+            print("[OwnerMansion116] Structural supports:",supports)
             local opened=0
             for _,p in ipairs(m:GetDescendants()) do
                 if not p:IsA("BasePart") then continue end
@@ -1709,34 +1746,43 @@ do
                 end
             end
             if path then
-                -- Cut and fill a continuous road bed, with feathered shoulders.
-                for j=1,#path-1 do
-                    local a,b=path[j],path[j+1]
-                    local mid=(a+b)/2
-                    local rr=Region3.new(Vector3.new(math.min(a.X,b.X)-25,-12,math.min(a.Z,b.Z)-25),Vector3.new(math.max(a.X,b.X)+25,320,math.max(a.Z,b.Z)+25)):ExpandToGrid(4)
-                    local mats,occ=W.Terrain:ReadVoxels(rr,4)
-                    local origin=rr.CFrame.Position-rr.Size/2
-                    local av,bv=Vector2.new(a.X,a.Z),Vector2.new(b.X,b.Z)
-                    local ab=bv-av
-                    for ix=1,#mats do for iz=1,#mats[ix][1] do
-                        local px,pz=origin.X+(ix-.5)*4,origin.Z+(iz-.5)*4
-                        local v=Vector2.new(px,pz)
-                        local t=math.clamp((v-av):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)
-                        local dist=(v-av-ab*t).Magnitude
-                        local col={x1=px-2,x2=px+2,z1=pz-2,z2=pz+2}
-                        if dist<23 and not collision(staticIndex,col,3) and not collision(accessIndex,col,3) and not collision(roadIndex,col,2) and not intersects(col,plot,0) then
-                            local old=sample(px,pz) or streetY
-                            local weight=math.clamp((dist-10)/13,0,1);weight=weight*weight*(3-2*weight)
-                            local top=(a.Y+(b.Y-a.Y)*t-.6)*(1-weight)+old*weight
-                            for iy=1,#mats[ix] do
-                                local wy=origin.Y+(iy-.5)*4
-                                local fill=math.clamp((top-wy)/4+.5,0,1)
-                                occ[ix][iy][iz]=fill;mats[ix][iy][iz]=fill>0 and Enum.Material.Grass or Enum.Material.Air
+                -- Grade the complete corridor in one pass. Overlapping segment writes
+                -- previously restored grass over adjacent road sections.
+                local minPX,maxPX,minPZ,maxPZ=math.huge,-math.huge,math.huge,-math.huge
+                for _,p in ipairs(path) do minPX=math.min(minPX,p.X);maxPX=math.max(maxPX,p.X);minPZ=math.min(minPZ,p.Z);maxPZ=math.max(maxPZ,p.Z) end
+                for gx=math.floor((minPX-40)/32)*32,maxPX+40,32 do
+                    for gz=math.floor((minPZ-40)/32)*32,maxPZ+40,32 do
+                        local rr=Region3.new(Vector3.new(gx,-12,gz),Vector3.new(gx+32,320,gz+32)):ExpandToGrid(4)
+                        local mats,occ=W.Terrain:ReadVoxels(rr,4)
+                        local changed=false
+                        for ix=1,#mats do for iz=1,#mats[ix][1] do
+                            local px,pz=gx+(ix-.5)*4,gz+(iz-.5)*4
+                            local v=Vector2.new(px,pz)
+                            local best,roadY=math.huge,0
+                            for j=1,#path-1 do
+                                local a,b=path[j],path[j+1]
+                                local av,bv=Vector2.new(a.X,a.Z),Vector2.new(b.X,b.Z)
+                                local ab=bv-av
+                                local t=math.clamp((v-av):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)
+                                local dist=(v-av-ab*t).Magnitude
+                                if dist<best then best=dist;roadY=a.Y+(b.Y-a.Y)*t end
                             end
-                        end
-                    end end
-                    W.Terrain:WriteVoxels(rr,4,mats,occ)
-                    if j%8==0 then task.wait() end
+                            local col={x1=px-2,x2=px+2,z1=pz-2,z2=pz+2}
+                            if best<38 and not collision(staticIndex,col,1) and not collision(accessIndex,col,1) and not intersects(col,plot,0) then
+                                local old=sample(px,pz) or streetY
+                                local weight=math.clamp((best-16)/22,0,1);weight=weight*weight*(3-2*weight)
+                                local top=(roadY-2.5)*(1-weight)+old*weight
+                                for iy=1,#mats[ix] do
+                                    local wy=-12+(iy-.5)*4
+                                    local fill=math.clamp((top-wy)/4+.5,0,1)
+                                    occ[ix][iy][iz]=fill;mats[ix][iy][iz]=fill>0 and Enum.Material.Grass or Enum.Material.Air
+                                end
+                                changed=true
+                            end
+                        end end
+                        if changed then W.Terrain:WriteVoxels(rr,4,mats,occ) end
+                    end
+                    task.wait()
                 end
             end
             if path then
@@ -1747,8 +1793,10 @@ do
                     local cf=CFrame.lookAt(mid,b)
                     local length=(b-a).Magnitude
                     -- Thin deck with a retaining base; terrain is not globally cleared.
-                    part(drive,"RoadDeck",Vector3.new(18,.65,length+1.5),cf*CFrame.new(0,-.325,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
-                    part(drive,"RoadBase",Vector3.new(18,3,length+1.5),cf*CFrame.new(0,-2,0),Color3.fromRGB(100,99,95),Enum.Material.Concrete,true)
+                    part(drive,"RoadDeck",Vector3.new(18,1.2,length+3),cf*CFrame.new(0,-.6,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
+                    part(drive,"RoadBase",Vector3.new(18,5,length+3),cf*CFrame.new(0,-3,0),Color3.fromRGB(100,99,95),Enum.Material.Concrete,true)
+                    local joint=part(drive,"RoadJoint",Vector3.new(1.2,18,18),CFrame.new(b.X,b.Y-.6,b.Z)*CFrame.Angles(0,0,math.pi/2),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
+                    joint.Shape=Enum.PartType.Cylinder
                     if j%4==0 then
                         for _,side in ipairs({-1,1}) do
                             part(drive,"EdgePost",Vector3.new(.6,2.8,.6),cf*CFrame.new(side*8,1.4,0),Color3.fromRGB(190,190,185),Enum.Material.Metal,true)
@@ -1773,6 +1821,36 @@ do
             else
                 warn("[OwnerMansion115] No clear curved route under 18% grade; need exact street and driveway coordinates")
             end
+            -- Replant the reshaped hillside outside the estate and access corridor.
+            local planted=0
+            if forest then
+                local templates={}
+                for _,tree in ipairs(forest:GetChildren()) do
+                    if tree:IsA("Model") then table.insert(templates,tree);if #templates>=12 then break end end
+                end
+                local rng=Random.new(116)
+                for px=x-w/2-130,x+w/2+130,23 do
+                    for pz=z-d/2-130,z+d/2+130,23 do
+                        local q=Vector2.new(px+rng:NextNumber(-5,5),pz+rng:NextNumber(-5,5))
+                        local rr={x1=q.X-9,x2=q.X+9,z1=q.Y-9,z2=q.Y+9}
+                        if intersects(rr,plot,12) or collision(staticIndex,rr,5) or collision(roadIndex,rr,5) or collision(accessIndex,rr,5) or collision(reservedIndex,rr,5) then continue end
+                        local nearRoad=false
+                        if path then for j=1,#path-1 do
+                            local a,b=Vector2.new(path[j].X,path[j].Z),Vector2.new(path[j+1].X,path[j+1].Z)
+                            local ab=b-a;local t=math.clamp((q-a):Dot(ab)/math.max(ab:Dot(ab),.01),0,1)
+                            if (q-a-ab*t).Magnitude<24 then nearRoad=true;break end
+                        end end
+                        if nearRoad or #templates==0 then continue end
+                        local hit=W:Raycast(Vector3.new(q.X,400,q.Y),Vector3.new(0,-430,0),terrainRay)
+                        if not hit or hit.Normal.Y<.55 or hit.Position.Y<streetY+8 then continue end
+                        local tree=templates[rng:NextInteger(1,#templates)]:Clone()
+                        local lo,hi=bounds(tree)
+                        tree:PivotTo(tree:GetPivot()+Vector3.new(q.X-(lo.X+hi.X)/2,hit.Position.Y-lo.Y-.4,q.Y-(lo.Z+hi.Z)/2))
+                        tree.Parent=forest;planted+=1
+                    end
+                end
+            end
+            print("[OwnerMansion116] Hillside trees:",planted)
             print("[OwnerMansion105] PLACED:",x,base,z,"footprint:",w,d,"trees removed:",removed)
         end
     end
