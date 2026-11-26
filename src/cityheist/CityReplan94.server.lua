@@ -4,7 +4,7 @@ if not RS:IsStudio() then return end
 local W=workspace
 local SS=game:GetService("ServerStorage")
 if W:GetAttribute("CityReplan94Running") then return end
-print("[CityReplan94] REVISION 104: public edge landscaping and safe road ends")
+print("[CityReplan94] REVISION 105: selected hill owner estate and driveway preview")
 W:SetAttribute("CityReplan94Running",true)
 local names={"CityHeistPrefabCity74","CityHeistInfill81","CityHeistStreetscape79","CityHeistInfrastructure86","CityHeistAccess88"}
 local old={}
@@ -1237,6 +1237,155 @@ do
         end
         warn("[OwnerMansion104] Rejected model:",id,"parts:",parts,"size:",size)
         asset:Destroy()
+    end
+end
+-- Step 105: owner estate at the player-selected hill. No access-control logic yet.
+do
+    local landscape=W:FindFirstChild("CityLandscape97")
+    local library=SS:FindFirstChild("CityOwnerMansionTemplates104")
+    local source=library and library:GetChildren()[1]
+    if not landscape or not source then
+        warn("[OwnerMansion105] No verified imported mansion; hill left intact")
+    else
+        local x,z=1046.787,633.584
+        local terrainRay=RaycastParams.new()
+        terrainRay.FilterType=Enum.RaycastFilterType.Include
+        terrainRay.FilterDescendantsInstances={W.Terrain,landscape:FindFirstChild("ContinuousCityFoundation")}
+        local function sample(px,pz)
+            local hit=W:Raycast(Vector3.new(px,400,pz),Vector3.new(0,-430,0),terrainRay)
+            return hit and hit.Position.Y
+        end
+        local y=sample(x,z)
+        local m=Instance.new("Model");m.Name="OwnerMansion"
+        source:Clone().Parent=m
+        local lo,hi=bounds(m);local size=hi-lo
+        local target=math.min(1,108/math.max(size.X,size.Z))
+        m:ScaleTo(m:GetScale()*target)
+        m:PivotTo(CFrame.Angles(0,math.rad(90),0))
+        lo,hi=bounds(m);size=hi-lo
+        local w,d=math.max(100,size.X+30),math.max(100,size.Z+30)
+        local plot={x1=x-w/2,x2=x+w/2,z1=z-d/2,z2=z+d/2}
+        if not y or y<35 or collision(staticIndex,plot,8) or collision(reservedIndex,plot,8) or collision(roadIndex,plot,8) or collision(accessIndex,plot,8) then
+            warn("[OwnerMansion105] Unsafe hill footprint:",x,y,z);m:Destroy()
+        else
+            local estate=Instance.new("Folder");estate.Name="CityOwnerEstate105";estate.Parent=W
+            -- Level only the selected plot; leave the rest of the mountain untouched.
+            local base=math.floor(y/4)*4
+            W.Terrain:FillBlock(CFrame.new(x,base+90,z),Vector3.new(w,180,d),Enum.Material.Air)
+            W.Terrain:FillBlock(CFrame.new(x,base-12,z),Vector3.new(w,24,d),Enum.Material.Rock)
+            part(estate,"EstateTerrace",Vector3.new(w,.8,d),CFrame.new(x,base+.4,z),Color3.fromRGB(173,169,158),Enum.Material.Concrete,true)
+            m:PivotTo(m:GetPivot()+Vector3.new(x-(lo.X+hi.X)/2,base+.8-lo.Y,z-(lo.Z+hi.Z)/2))
+            m.Parent=estate
+            local forest=landscape:FindFirstChild("MountainForest102")
+            local removed=0
+            local function clearTrees(r)
+                if not forest then return end
+                for _,tree in ipairs(forest:GetChildren()) do
+                    if tree:IsA("Model") then
+                        local p=tree:GetPivot().Position
+                        if p.X>=r.x1-10 and p.X<=r.x2+10 and p.Z>=r.z1-10 and p.Z<=r.z2+10 then tree:Destroy();removed+=1 end
+                    end
+                end
+            end
+            clearTrees(plot)
+            -- Find an east-facing city street end and a terrain-following route.
+            local starts={}
+            for _,s in ipairs(segments) do
+                if s.horizontal and s.x2>=maxX-30 then
+                    local sz=(s.z1+s.z2)/2
+                    if sz>350 then table.insert(starts,Vector3.new(s.x2-2,s.y,sz)) end
+                end
+            end
+            table.sort(starts,function(a,b)return math.abs(a.Z-z)<math.abs(b.Z-z) end)
+            local goal=Vector3.new(x-w/2,base+.8,z)
+            local path=nil
+            local spacing=16
+            -- Bounded Dijkstra search, using only clear, moderate-grade terrain cells.
+            for _,start in ipairs(starts) do
+                local nodes,open={},{}
+                local function node(ix,iz)
+                    local key=ix..":"..iz
+                    if nodes[key]~=nil then return nodes[key] or nil end
+                    local px,pz=start.X+ix*spacing,start.Z+iz*spacing
+                    if px<start.X or px>x+180 or pz<360 or pz>z+300 then nodes[key]=false;return nil end
+                    local rr={x1=px-11,x2=px+11,z1=pz-11,z2=pz+11}
+                    if collision(staticIndex,rr,2) or collision(reservedIndex,rr,0,true) or collision(accessIndex,rr,2) then nodes[key]=false;return nil end
+                    local h=sample(px,pz)
+                    if not h then nodes[key]=false;return nil end
+                    local n={ix=ix,iz=iz,p=Vector3.new(px,h+.25,pz),cost=math.huge}
+                    nodes[key]=n;return n
+                end
+                local first={ix=0,iz=0,p=start,cost=0}
+                nodes["0:0"]=first;table.insert(open,first)
+                local iterations=0
+                while #open>0 and iterations<4500 do
+                    local best=1
+                    for j=2,#open do if open[j].cost<open[best].cost then best=j end end
+                    local a=table.remove(open,best)
+                    if a.closed then continue end
+                    a.closed=true;iterations+=1
+                    local delta=goal-a.p
+                    local horizontal=Vector2.new(delta.X,delta.Z).Magnitude
+                    if horizontal<=spacing*1.5 and horizontal>1 and math.abs(delta.Y)/horizontal<=.25 then
+                        path={goal};local q=a
+                        while q do table.insert(path,1,q.p);q=q.prev end
+                        break
+                    end
+                    for _,dir in ipairs({{1,0},{-1,0},{0,1},{0,-1},{1,1},{1,-1},{-1,1},{-1,-1}}) do
+                        local b=node(a.ix+dir[1],a.iz+dir[2])
+                        if not b or b.closed then continue end
+                        local v=b.p-a.p
+                        local run=Vector2.new(v.X,v.Z).Magnitude
+                        local grade=math.abs(v.Y)/run
+                        if grade>.25 then continue end
+                        local mid=(a.p+b.p)/2
+                        local rr={x1=mid.X-11,x2=mid.X+11,z1=mid.Z-11,z2=mid.Z+11}
+                        if collision(staticIndex,rr,2) or collision(reservedIndex,rr,0,true) or collision(accessIndex,rr,2) then continue end
+                        local mh=sample(mid.X,mid.Z)
+                        if not mh or math.abs(mh-mid.Y)>3 then continue end
+                        local cost=a.cost+run*(1+grade*4)
+                        if cost<b.cost then b.cost=cost;b.prev=a;table.insert(open,b) end
+                    end
+                    if iterations%150==0 then task.wait() end
+                end
+                if path then break end
+            end
+            if path then
+                local drive=Instance.new("Folder");drive.Name="MountainDriveway";drive.Parent=estate
+                for j=1,#path-1 do
+                    local a,b=path[j],path[j+1]
+                    local mid=(a+b)/2
+                    local cf=CFrame.lookAt(mid,b)
+                    local length=(b-a).Magnitude
+                    -- Thin deck with a retaining base; terrain is not globally cleared.
+                    part(drive,"RoadDeck",Vector3.new(18,.65,length+1.5),cf*CFrame.new(0,-.325,0),Color3.fromRGB(57,59,62),Enum.Material.Asphalt,true)
+                    part(drive,"RoadBase",Vector3.new(18,3,length+1.5),cf*CFrame.new(0,-2,0),Color3.fromRGB(100,99,95),Enum.Material.Concrete,true)
+                    if j%4==0 then
+                        for _,side in ipairs({-1,1}) do
+                            part(drive,"EdgePost",Vector3.new(.6,2.8,.6),cf*CFrame.new(side*8,1.4,0),Color3.fromRGB(190,190,185),Enum.Material.Metal,true)
+                        end
+                    end
+                end
+                -- Remove trees only along the actual road corridor.
+                if forest then
+                    for _,tree in ipairs(forest:GetChildren()) do
+                        if not tree:IsA("Model") then continue end
+                        local p=tree:GetPivot().Position
+                        local v=Vector2.new(p.X,p.Z)
+                        for j=1,#path-1 do
+                            local a,b=Vector2.new(path[j].X,path[j].Z),Vector2.new(path[j+1].X,path[j+1].Z)
+                            local ab=b-a
+                            local t=math.clamp((v-a):Dot(ab)/ab:Dot(ab),0,1)
+                            if (v-a-ab*t).Magnitude<17 then tree:Destroy();removed+=1;break end
+                        end
+                    end
+                end
+                print("[OwnerMansion105] DRIVEWAY segments:",#path-1)
+            else
+                warn("[OwnerMansion105] No safe driveway under 25% grade; mansion placed, road needs grading")
+            end
+            print("[OwnerMansion105] PLACED:",x,base,z,"footprint:",w,d,"trees removed:",removed)
+        end
     end
 end
 print(string.format("[CityReplan94] DONE: %d buildings, %d central, %d parking lots, 1 fuel station, %d decorations, %d landscape chunks",total,centerCount,parkingCount,decor,chunks))
